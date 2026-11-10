@@ -1,7 +1,14 @@
 "use client";
 
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  getAuth,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signOut,
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -18,3 +25,21 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+export async function createStaffInvite(email: string) {
+  const inviteApp = getApps().find((candidate) => candidate.name === "staff-invite") ?? initializeApp(firebaseConfig, "staff-invite");
+  const inviteAuth = getAuth(inviteApp);
+  const temporaryPassword = `MediTap-${crypto.randomUUID()}!`;
+  const credential = await createUserWithEmailAndPassword(inviteAuth, email, temporaryPassword);
+
+  try {
+    await sendEmailVerification(credential.user);
+    await sendPasswordResetEmail(auth, email);
+    return credential.user.uid;
+  } catch (error) {
+    await deleteUser(credential.user).catch(() => undefined);
+    throw error;
+  } finally {
+    await signOut(inviteAuth);
+  }
+}

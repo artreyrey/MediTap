@@ -3,26 +3,27 @@
 import * as React from "react";
 import { FirebaseError } from "firebase/app";
 import {
-  addDoc,
   collection,
   doc,
   onSnapshot,
   serverTimestamp,
+  setDoc,
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { Archive, CalendarDays, KeyRound, Pencil, Plus, Search, X } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarDays, KeyRound, Pencil, Plus, Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { auth, db } from "@/lib/firebase";
+import { auth, createStaffInvite, db } from "@/lib/firebase";
 
 type StaffRole = "Administrator" | "Operator";
 type StaffStatus = "active" | "archived";
 
 type StaffMember = {
   id: string;
+  uid: string;
   role: StaffRole;
   fullName: string;
   username: string;
@@ -63,6 +64,7 @@ export function StaffTable() {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [actionId, setActionId] = React.useState<string | null>(null);
+  const [canManage, setCanManage] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [error, setError] = React.useState(false);
 
@@ -74,6 +76,7 @@ export function StaffTable() {
           const data = item.data();
           return {
             id: item.id,
+            uid: typeof data.uid === "string" ? data.uid : item.id,
             role: data.role === "Administrator" ? "Administrator" : "Operator",
             fullName: typeof data.fullName === "string" ? data.fullName : "Unnamed staff",
             username: typeof data.username === "string" ? data.username : "—",
@@ -86,6 +89,8 @@ export function StaffTable() {
 
         nextMembers.sort((left, right) => (right.dateJoined?.toMillis() ?? 0) - (left.dateJoined?.toMillis() ?? 0));
         setMembers(nextMembers);
+        const currentUid = auth.currentUser?.uid;
+        setCanManage(Boolean(currentUid && nextMembers.some((member) => member.uid === currentUid && member.role === "Administrator")));
         setLoading(false);
       },
       (snapshotError) => {
@@ -121,12 +126,24 @@ export function StaffTable() {
     setError(false);
 
     try {
+      if (!canManage) {
+        throw new Error("Only administrators can manage staff members.");
+      }
+
       if (editingId) {
         await updateDoc(doc(db, "staff", editingId), { ...form, updatedAt: serverTimestamp() });
         setMessage("Staff information updated.");
       } else {
-        await addDoc(collection(db, "staff"), {
+        const normalizedEmail = form.email.trim().toLowerCase();
+        if (members.some((member) => member.email.toLowerCase() === normalizedEmail)) {
+          throw new Error("A staff profile with this email already exists.");
+        }
+
+        const uid = await createStaffInvite(normalizedEmail);
+        await setDoc(doc(db, "staff", uid), {
           ...form,
+          uid,
+          email: normalizedEmail,
           status: "active",
           emailVerified: false,
           dateJoined: serverTimestamp(),
@@ -134,26 +151,28 @@ export function StaffTable() {
           updatedAt: serverTimestamp(),
           createdBy: auth.currentUser?.uid ?? null,
         });
-        setMessage("Staff profile added to Firestore.");
+        setMessage("Staff profile added. Verification and password setup emails were sent.");
       }
       setModalOpen(false);
     } catch (saveError) {
       setError(true);
-      setMessage(getFirestoreMessage(saveError));
+      setMessage(saveError instanceof Error ? saveError.message : getFirestoreMessage(saveError));
     } finally {
       setSaving(false);
     }
   }
 
   async function archiveMember(member: StaffMember) {
+    if (!canManage) return;
     if (!window.confirm(`Archive ${member.fullName}?`)) return;
 
     setActionId(member.id);
     setMessage("");
     setError(false);
     try {
-      await updateDoc(doc(db, "staff", member.id), { status: "archived", updatedAt: serverTimestamp() });
-      setMessage(`${member.fullName} was archived.`);
+      const nextStatus = member.status === "archived" ? "active" : "archived";
+      await updateDoc(doc(db, "staff", member.id), { status: nextStatus, updatedAt: serverTimestamp() });
+      setMessage(`${member.fullName} was ${nextStatus === "archived" ? "archived" : "unarchived"}.`);
     } catch (archiveError) {
       setError(true);
       setMessage(getFirestoreMessage(archiveError));
@@ -163,6 +182,7 @@ export function StaffTable() {
   }
 
   async function resetPassword(member: StaffMember) {
+    if (!canManage) return;
     setActionId(member.id);
     setMessage("");
     setError(false);
@@ -192,7 +212,7 @@ export function StaffTable() {
           <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Staff Information</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Manage administrator and operator profiles connected to Firebase.</p>
         </div>
-        <Button size="sm" onClick={openAddModal}><Plus className="size-4" aria-hidden="true" /> Add Staff</Button>
+        {canManage ? <Button size="sm" onClick={openAddModal}><Plus className="size-4" aria-hidden="true" /> Add Staff</Button> : null}
       </div>
 
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
@@ -239,9 +259,11 @@ export function StaffTable() {
                   <td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${member.status === "archived" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}><span className={`size-1.5 rounded-full ${member.status === "archived" ? "bg-muted-foreground" : "bg-primary"}`} />{member.status === "archived" ? "Archived" : member.emailVerified ? "Verified Active" : "Active"}</span></td>
                   <td className="px-4 py-4 text-muted-foreground"><span className="inline-flex items-center gap-1.5"><CalendarDays className="size-3.5" aria-hidden="true" /> {formatDate(member.dateJoined)}</span></td>
                   <td className="px-4 py-4"><div className="flex justify-end gap-1">
-                    <button type="button" title="Send password reset" aria-label={`Send password reset to ${member.fullName}`} disabled={actionId === member.id} onClick={() => void resetPassword(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"><KeyRound className="size-4" aria-hidden="true" /></button>
-                    <button type="button" title="Edit staff" aria-label={`Edit ${member.fullName}`} onClick={() => openEditModal(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"><Pencil className="size-4" aria-hidden="true" /></button>
-                    {member.status !== "archived" ? <button type="button" title="Archive staff" aria-label={`Archive ${member.fullName}`} disabled={actionId === member.id} onClick={() => void archiveMember(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"><Archive className="size-4" aria-hidden="true" /></button> : null}
+                    {canManage ? <>
+                      <button type="button" title="Send password reset" aria-label={`Send password reset to ${member.fullName}`} disabled={actionId === member.id} onClick={() => void resetPassword(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"><KeyRound className="size-4" aria-hidden="true" /></button>
+                      <button type="button" title="Edit staff" aria-label={`Edit ${member.fullName}`} onClick={() => openEditModal(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"><Pencil className="size-4" aria-hidden="true" /></button>
+                      <button type="button" title={member.status === "archived" ? "Unarchive staff" : "Archive staff"} aria-label={`${member.status === "archived" ? "Unarchive" : "Archive"} ${member.fullName}`} disabled={actionId === member.id} onClick={() => void archiveMember(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50">{member.status === "archived" ? <ArchiveRestore className="size-4" aria-hidden="true" /> : <Archive className="size-4" aria-hidden="true" />}</button>
+                    </> : <span className="px-2 text-xs text-muted-foreground">Read only</span>}
                   </div></td>
                 </tr>
               ))}
@@ -254,10 +276,11 @@ export function StaffTable() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="presentation">
           <section role="dialog" aria-modal="true" aria-labelledby="staff-modal-title" className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
-              <div><h2 id="staff-modal-title" className="text-xl font-semibold">{editingId ? "Edit Staff" : "Add Staff"}</h2><p className="mt-1 text-sm text-muted-foreground">Save the staff profile in Firestore.</p></div>
+              <div><h2 id="staff-modal-title" className="text-xl font-semibold">{editingId ? "Edit Staff" : "Add staff member"}</h2><p className="mt-1 text-sm text-muted-foreground">The staff record is added after the recipient verifies the email and sets a password.</p></div>
               <button type="button" onClick={() => setModalOpen(false)} className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close staff form"><X className="size-4" aria-hidden="true" /></button>
             </div>
             <form className="mt-6 space-y-4" onSubmit={saveMember}>
+              {!editingId ? <div className="rounded-xl border border-border bg-background p-4"><p className="flex items-center gap-2 text-sm font-semibold"><span aria-hidden="true">✉</span> Email verification required</p><p className="mt-2 pl-6 text-sm leading-6 text-muted-foreground">MediTap sends a verification link and password setup email to the recipient.</p></div> : null}
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2 text-sm font-medium">Role<select value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as StaffRole }))} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-4 focus:ring-ring/20"><option>Administrator</option><option>Operator</option></select></label>
                 <label className="space-y-2 text-sm font-medium">Full Name<Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Juan Dela Cruz" required className="bg-background" /></label>
