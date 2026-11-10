@@ -4,6 +4,7 @@ import * as React from "react";
 import { FirebaseError } from "firebase/app";
 import {
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   serverTimestamp,
@@ -17,6 +18,16 @@ import { Archive, ArchiveRestore, CalendarDays, KeyRound, Pencil, Plus, Search, 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { auth, createStaffInvite, db } from "@/lib/firebase";
+
+const ACTION_WINDOW_MS = 3 * 60 * 1000;
+
+function formatCountdown(seconds: number) {
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function createActionDeadline() {
+  return Date.now() + ACTION_WINDOW_MS;
+}
 
 type StaffRole = "Administrator" | "Operator";
 type StaffStatus = "active" | "archived";
@@ -48,7 +59,7 @@ function formatDate(value: Timestamp | null) {
 
 function getFirestoreMessage(error: unknown) {
   if (error instanceof FirebaseError && error.code === "permission-denied") {
-    return "Firestore denied this action. Check the staff collection rules for authenticated users.";
+    return "Firestore denied this action. Check the staffs collection rules for authenticated users.";
   }
 
   return "Something went wrong. Please try again.";
@@ -67,10 +78,22 @@ export function StaffTable() {
   const [canManage, setCanManage] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [error, setError] = React.useState(false);
+  const [actionDeadline, setActionDeadline] = React.useState<number | null>(null);
+  const [actionSeconds, setActionSeconds] = React.useState(0);
+  const [actionKind, setActionKind] = React.useState<"verification" | "password-reset" | null>(null);
+
+  React.useEffect(() => {
+    if (!actionDeadline) return;
+
+    const updateCountdown = () => setActionSeconds(Math.max(0, Math.ceil((actionDeadline - Date.now()) / 1000)));
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [actionDeadline]);
 
   React.useEffect(() => {
     const unsubscribe = onSnapshot(
-      collection(db, "staff"),
+      collection(db, "staffs"),
       (snapshot) => {
         const nextMembers = snapshot.docs.map((item) => {
           const data = item.data();
@@ -90,7 +113,9 @@ export function StaffTable() {
         nextMembers.sort((left, right) => (right.dateJoined?.toMillis() ?? 0) - (left.dateJoined?.toMillis() ?? 0));
         setMembers(nextMembers);
         const currentUid = auth.currentUser?.uid;
-        setCanManage(Boolean(currentUid && nextMembers.some((member) => member.uid === currentUid && member.role === "Administrator")));
+        setCanManage(Boolean(
+          (currentUid && nextMembers.some((member) => member.uid === currentUid && member.role === "Administrator")),
+        ));
         setLoading(false);
       },
       (snapshotError) => {
@@ -131,7 +156,12 @@ export function StaffTable() {
       }
 
       if (editingId) {
-        await updateDoc(doc(db, "staff", editingId), { ...form, updatedAt: serverTimestamp() });
+        const previousMember = members.find((member) => member.id === editingId);
+        await updateDoc(doc(db, "staffs", editingId), { ...form, updatedAt: serverTimestamp() });
+        await setDoc(doc(db, "loginAliases", form.username.trim().toLowerCase()), { email: form.email.trim().toLowerCase(), uid: editingId });
+        if (previousMember && previousMember.username.toLowerCase() !== form.username.trim().toLowerCase()) {
+          await deleteDoc(doc(db, "loginAliases", previousMember.username.toLowerCase()));
+        }
         setMessage("Staff information updated.");
       } else {
         const normalizedEmail = form.email.trim().toLowerCase();
@@ -140,7 +170,7 @@ export function StaffTable() {
         }
 
         const uid = await createStaffInvite(normalizedEmail);
-        await setDoc(doc(db, "staff", uid), {
+        await setDoc(doc(db, "staffs", uid), {
           ...form,
           uid,
           email: normalizedEmail,
@@ -151,6 +181,10 @@ export function StaffTable() {
           updatedAt: serverTimestamp(),
           createdBy: auth.currentUser?.uid ?? null,
         });
+        await setDoc(doc(db, "loginAliases", form.username.trim().toLowerCase()), { email: normalizedEmail, uid });
+        setActionKind("verification");
+        setActionDeadline(createActionDeadline());
+        setActionSeconds(180);
         setMessage("Staff profile added. Verification and password setup emails were sent.");
       }
       setModalOpen(false);
@@ -171,7 +205,7 @@ export function StaffTable() {
     setError(false);
     try {
       const nextStatus = member.status === "archived" ? "active" : "archived";
-      await updateDoc(doc(db, "staff", member.id), { status: nextStatus, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "staffs", member.id), { status: nextStatus, updatedAt: serverTimestamp() });
       setMessage(`${member.fullName} was ${nextStatus === "archived" ? "archived" : "unarchived"}.`);
     } catch (archiveError) {
       setError(true);
@@ -188,6 +222,9 @@ export function StaffTable() {
     setError(false);
     try {
       await sendPasswordResetEmail(auth, member.email);
+      setActionKind("password-reset");
+      setActionDeadline(createActionDeadline());
+      setActionSeconds(180);
       setMessage(`If ${member.email} has an account, a reset email is on its way.`);
     } catch (resetError) {
       setError(true);
@@ -230,7 +267,8 @@ export function StaffTable() {
           </div>
         </div>
 
-        {message ? <p role={error ? "alert" : "status"} className={`mb-4 mt-4 text-sm ${error ? "text-rose-300" : "text-primary"}`}>{message}</p> : null}
+        {message ? <p role={error ? "alert" : "status"} className={`mb-2 mt-4 text-sm ${error ? "text-rose-300" : "text-primary"}`}>{message}</p> : null}
+        {actionDeadline !== null ? <p className={`mb-4 text-xs ${actionSeconds > 0 ? "text-muted-foreground" : "text-rose-300"}`}>{actionSeconds > 0 ? `${actionKind === "verification" ? "Verification and password setup links" : "Password reset link"} expire in ${formatCountdown(actionSeconds)}.` : `${actionKind === "verification" ? "Verification and password setup links" : "Password reset link"} expired. Send a new one to restart the timer.`}</p> : null}
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-border">
           <table className="w-full min-w-[900px] text-left text-sm">

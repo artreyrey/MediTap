@@ -9,11 +9,22 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 import { PasswordField } from "@/components/login/password-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+
+const ACTION_WINDOW_MS = 3 * 60 * 1000;
+
+function formatCountdown(seconds: number) {
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function createActionDeadline() {
+  return Date.now() + ACTION_WINDOW_MS;
+}
 
 function getAuthErrorMessage(error: unknown) {
   if (!(error instanceof FirebaseError)) {
@@ -40,15 +51,43 @@ function getAuthErrorMessage(error: unknown) {
 
 export function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = React.useState("");
+  const [identifier, setIdentifier] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState("");
   const [error, setError] = React.useState(false);
+  const [verificationDeadline, setVerificationDeadline] = React.useState<number | null>(null);
+  const [verificationSeconds, setVerificationSeconds] = React.useState(0);
+  const [resetDeadline, setResetDeadline] = React.useState<number | null>(null);
+  const [resetSeconds, setResetSeconds] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!verificationDeadline && !resetDeadline) return;
+
+    const updateCountdowns = () => {
+      const now = Date.now();
+      if (verificationDeadline) setVerificationSeconds(Math.max(0, Math.ceil((verificationDeadline - now) / 1000)));
+      if (resetDeadline) setResetSeconds(Math.max(0, Math.ceil((resetDeadline - now) / 1000)));
+    };
+
+    updateCountdowns();
+    const timer = window.setInterval(updateCountdowns, 1000);
+    return () => window.clearInterval(timer);
+  }, [resetDeadline, verificationDeadline]);
 
   function showMessage(nextMessage: string, isError = false) {
     setError(isError);
     setMessage(nextMessage);
+  }
+
+  async function resolveEmail(value: string) {
+    const normalizedValue = value.trim().toLowerCase();
+    if (!normalizedValue) return "";
+    if (normalizedValue.includes("@")) return normalizedValue;
+
+    const aliasSnapshot = await getDoc(doc(db, "loginAliases", normalizedValue));
+    const aliasEmail = aliasSnapshot.data()?.email;
+    return typeof aliasEmail === "string" ? aliasEmail : normalizedValue;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -58,11 +97,14 @@ export function LoginForm() {
     setError(false);
 
     try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const email = await resolveEmail(identifier);
+      const credential = await signInWithEmailAndPassword(auth, email, password);
 
       if (!credential.user.emailVerified) {
         await sendEmailVerification(credential.user);
         await signOut(auth);
+        setVerificationDeadline(createActionDeadline());
+        setVerificationSeconds(180);
         showMessage("Verify your email first. A new verification link was sent.", true);
       } else {
         router.replace("/dashboard");
@@ -75,10 +117,10 @@ export function LoginForm() {
   }
 
   async function handlePasswordReset() {
-    const normalizedEmail = email.trim();
+    const normalizedEmail = await resolveEmail(identifier);
 
     if (!normalizedEmail) {
-      showMessage("Enter your email address first, then choose Forgot Password.", true);
+      showMessage("Enter your email or username first, then choose Forgot Password.", true);
       return;
     }
 
@@ -88,6 +130,8 @@ export function LoginForm() {
 
     try {
       await sendPasswordResetEmail(auth, normalizedEmail);
+      setResetDeadline(createActionDeadline());
+      setResetSeconds(180);
       showMessage("If that account exists, a password reset email is on its way.");
     } catch (authError) {
       showMessage(getAuthErrorMessage(authError), true);
@@ -100,19 +144,18 @@ export function LoginForm() {
     <>
       <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
         <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-semibold text-brand-100">
-            Email
+          <label htmlFor="identifier" className="text-sm font-semibold text-brand-100">
+            Email or Username
           </label>
           <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            inputMode="email"
+            id="identifier"
+            name="identifier"
+            type="text"
+            autoComplete="username"
             spellCheck={false}
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="Enter your email…"
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
+            placeholder="e.g. nurse1 or nurse@gmail.com"
             className="border-brand-600/65 bg-white/[0.04] text-brand-100 placeholder:text-brand-300/55 focus:border-brand-300/80 focus:ring-brand-300/20"
             required
           />
@@ -154,6 +197,16 @@ export function LoginForm() {
           className={`mt-5 text-center text-xs leading-5 ${error ? "text-rose-300" : "text-brand-300"}`}
         >
           {message}
+        </p>
+      ) : null}
+      {verificationDeadline !== null ? (
+        <p className={`mt-2 text-center text-xs ${verificationSeconds > 0 ? "text-brand-300" : "text-rose-300"}`}>
+          {verificationSeconds > 0 ? `Verification link expires in ${formatCountdown(verificationSeconds)}.` : "Verification link expired. Request a new one by signing in again."}
+        </p>
+      ) : null}
+      {resetDeadline !== null ? (
+        <p className={`mt-2 text-center text-xs ${resetSeconds > 0 ? "text-brand-300" : "text-rose-300"}`}>
+          {resetSeconds > 0 ? `Password reset link expires in ${formatCountdown(resetSeconds)}.` : "Password reset link expired. Request a new one."}
         </p>
       ) : null}
     </>

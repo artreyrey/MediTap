@@ -10,17 +10,24 @@ service cloud.firestore {
       return signedIn() && (
         request.auth.token.admin == true ||
         (
-          exists(/databases/$(database)/documents/staff/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role == 'Administrator'
+          exists(/databases/$(database)/documents/staffs/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/staffs/$(request.auth.uid)).data.role == 'Administrator'
         )
       );
     }
 
-    match /staff/{staffId} {
+    match /staffs/{staffId} {
       allow read: if signedIn();
       allow create: if isAdministrator() && request.resource.data.uid == staffId;
       allow update: if isAdministrator() && request.resource.data.uid == resource.data.uid;
       allow delete: if false;
+    }
+
+    // Username login reads one exact alias document; collection listing stays blocked.
+    match /loginAliases/{username} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update, delete: if isAdministrator();
     }
   }
 }

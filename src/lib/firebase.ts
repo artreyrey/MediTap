@@ -26,6 +26,7 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+// shortcut: Firebase's native action links keep provider-controlled expiry; use a custom action handler/backend for hard 3-minute invalidation.
 export async function createStaffInvite(email: string) {
   const inviteApp = getApps().find((candidate) => candidate.name === "staff-invite") ?? initializeApp(firebaseConfig, "staff-invite");
   const inviteAuth = getAuth(inviteApp);
