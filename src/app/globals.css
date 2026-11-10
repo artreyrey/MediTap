@@ -1,0 +1,122 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-brand-950: var(--brand-950);
+  --color-brand-700: var(--brand-700);
+  --color-brand-600: var(--brand-600);
+  --color-brand-500: var(--brand-500);
+  --color-brand-400: var(--brand-400);
+  --color-brand-300: var(--brand-300);
+  --color-brand-100: var(--brand-100);
+}
+
+:root {
+  --background: #f7fbfe;
+  --foreground: #001d39;
+  --card: #ffffff;
+  --card-foreground: #001d39;
+  --primary: #0a4174;
+  --primary-foreground: #ffffff;
+  --secondary: #bdd8e9;
+  --secondary-foreground: #001d39;
+  --muted: #edf5fa;
+  --muted-foreground: #49769f;
+  --accent: #e5f2fa;
+  --accent-foreground: #0a4174;
+  --border: #d3e4ef;
+  --ring: #7bbde8;
+  --brand-950: #001d39;
+  --brand-700: #0a4174;
+  --brand-600: #49769f;
+  --brand-500: #4e8ea2;
+  --brand-400: #6ea2b3;
+  --brand-300: #7bbde8;
+  --brand-100: #bdd8e9;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 6rem;
+}
+
+a,
+button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(123, 189, 232, 0.22);
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(12, 95, 103, 0.18);
+}
+
+.hero-grid {
+  background-color: #f7fbfe;
+  background-image:
+    linear-gradient(rgba(10, 65, 116, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(10, 65, 116, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-enter {
+  animation: rise-in 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.preview-enter {
+  animation: rise-in 700ms 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
