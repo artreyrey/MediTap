@@ -9,7 +9,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 
 import { PasswordField } from "@/components/login/password-field";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,7 @@ export function LoginForm() {
         setVerificationSeconds(180);
         showMessage("Verify your email first. A new verification link was sent.", true);
       } else {
+        await updateDoc(doc(db, "staffs", credential.user.uid), { emailVerified: true });
         router.replace("/dashboard");
       }
     } catch (authError) {

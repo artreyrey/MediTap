@@ -19,7 +19,12 @@ service cloud.firestore {
     match /staffs/{staffId} {
       allow read: if signedIn();
       allow create: if isAdministrator() && request.resource.data.uid == staffId;
-      allow update: if isAdministrator() && request.resource.data.uid == resource.data.uid;
+      allow update: if (isAdministrator() && request.resource.data.uid == resource.data.uid) ||
+        (signedIn() && staffId == request.auth.uid &&
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emailVerified']) &&
+          request.resource.data.emailVerified == true &&
+          request.auth.token.email_verified == true);
       allow delete: if false;
     }
 
