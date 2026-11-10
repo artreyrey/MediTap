@@ -278,21 +278,28 @@ export function StaffTable() {
           <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Staff Information</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Manage administrator and operator profiles connected to Firebase.</p>
         </div>
-        {canManage ? <Button size="sm" onClick={openAddModal}><Plus className="size-4" aria-hidden="true" /> Add Staff</Button> : null}
       </div>
 
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search staff…" className="bg-background pl-9" aria-label="Search staff" />
+        <div className="grid gap-3 border-b border-border pb-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+          <div className="flex justify-start">
+            {canManage ? <Button size="sm" className="rounded-lg" onClick={openAddModal}><Plus className="size-4" aria-hidden="true" /> Add staff</Button> : null}
           </div>
-          <div className="flex items-center gap-1 rounded-lg border border-border p-1 text-xs" role="group" aria-label="Filter staff status">
-            {(["active", "archived", "all"] as const).map((filter) => (
-              <button key={filter} type="button" onClick={() => setStatusFilter(filter)} className={`rounded-md px-3 py-2 capitalize transition-colors ${statusFilter === filter ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                {filter}
-              </button>
-            ))}
+          <label className="flex items-center justify-center gap-2 text-sm font-medium text-foreground">
+            <span>Search:</span>
+            <span className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search staff…" className="bg-background pl-9" aria-label="Search staff" />
+            </span>
+          </label>
+          <div className="flex justify-start lg:justify-end">
+            <div className="flex items-center gap-1 rounded-lg border border-border p-1 text-xs" role="group" aria-label="Filter staff status">
+              {(["active", "archived", "all"] as const).map((filter) => (
+                <button key={filter} type="button" onClick={() => setStatusFilter(filter)} className={`rounded-md px-3 py-2 capitalize transition-colors ${statusFilter === filter ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                  {filter}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -357,7 +364,7 @@ export function StaffTable() {
               <label className="block space-y-2 text-sm font-medium">Username<Input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} placeholder="jdelacruz" required className="bg-background" /></label>
               <label className="block space-y-2 text-sm font-medium">Email<Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="staff@meditap.ph" required className="bg-background" /></label>
               <p className="text-xs leading-5 text-muted-foreground">This creates the Firestore profile. The matching Firebase Authentication account must also exist before password reset can work.</p>
-              <div className="flex justify-end gap-2 pt-2"><Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : editingId ? "Save Changes" : "Add Staff"}</Button></div>
+              <div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Sending…" : editingId ? "Save Changes" : "Send verification email"}</Button></div>
             </form>
           </section>
         </div>
