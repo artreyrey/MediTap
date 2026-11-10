@@ -49,6 +49,23 @@
   --brand-100: #bdd8e9;
 }
 
+.dark {
+  --background: #0c0c0c;
+  --foreground: #f4f4f5;
+  --card: #171717;
+  --card-foreground: #f4f4f5;
+  --primary: #7bbde8;
+  --primary-foreground: #001d39;
+  --secondary: #242424;
+  --secondary-foreground: #f4f4f5;
+  --muted: #1c1c1c;
+  --muted-foreground: #a1a1aa;
+  --accent: #262626;
+  --accent-foreground: #f4f4f5;
+  --border: #303030;
+  --ring: #7bbde8;
+}
+
 * {
   border-color: var(--border);
 }

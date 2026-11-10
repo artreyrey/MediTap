@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { FirebaseError } from "firebase/app";
 import {
   sendEmailVerification,
@@ -38,6 +39,7 @@ function getAuthErrorMessage(error: unknown) {
 }
 
 export function LoginForm() {
+  const router = useRouter();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -63,7 +65,7 @@ export function LoginForm() {
         await signOut(auth);
         showMessage("Verify your email first. A new verification link was sent.", true);
       } else {
-        showMessage("Signed in successfully. Your MediTap session is ready.");
+        router.replace("/dashboard");
       }
     } catch (authError) {
       showMessage(getAuthErrorMessage(authError), true);
