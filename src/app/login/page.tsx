@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-import { PasswordField } from "@/components/login/password-field";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { LoginForm } from "@/components/login/login-form";
 
 export const metadata: Metadata = {
   title: "Staff Login | MediTap",
@@ -40,50 +38,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form className="mt-7 space-y-5" aria-describedby="auth-status">
-            <div className="space-y-2">
-              <label htmlFor="username" className="text-sm font-semibold text-brand-100">
-                Username or Email
-              </label>
-              <Input
-                id="username"
-                name="username"
-                type="text"
-                autoComplete="username"
-                placeholder="Enter your username or email…"
-                className="border-brand-600/65 bg-white/[0.04] text-brand-100 placeholder:text-brand-300/55 focus:border-brand-300/80 focus:ring-brand-300/20"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-semibold text-brand-100">
-                Password
-              </label>
-              <PasswordField
-                id="password"
-                name="password"
-                autoComplete="current-password"
-                placeholder="Enter your password…"
-                className="border-brand-600/65 bg-white/[0.04] text-brand-100 placeholder:text-brand-300/55 focus:border-brand-300/80 focus:ring-brand-300/20"
-              />
-            </div>
-
-            <Button type="button" size="lg" className="w-full bg-brand-100 text-brand-950 shadow-none hover:bg-white" aria-describedby="auth-status">
-              Log In
-            </Button>
-          </form>
-
-          <button
-            type="button"
-            className="mx-auto mt-6 block rounded-md px-2 py-1 text-sm text-brand-300/85 underline-offset-4 transition-colors hover:text-brand-100 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
-            title="Available after Firebase Authentication is connected"
-          >
-            Forgot Password?
-          </button>
-
-          <p id="auth-status" className="mt-5 text-center text-xs leading-5 text-brand-400/80">
-            Firebase Authentication will be connected next.
-          </p>
+          <LoginForm />
         </section>
       </div>
     </main>
