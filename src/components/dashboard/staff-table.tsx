@@ -99,8 +99,8 @@ function SortableHeader({
   const Icon = active ? (sortDirection === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
 
   return (
-    <th aria-sort={active ? sortDirection === "asc" ? "ascending" : "descending" : "none"} className="px-4 py-3 font-medium">
-      <button type="button" onClick={() => onSort(column)} className="inline-flex items-center gap-1.5 text-left transition-colors hover:text-foreground">
+    <th aria-sort={active ? sortDirection === "asc" ? "ascending" : "descending" : "none"} className="px-4 py-3 font-semibold">
+      <button type="button" onClick={() => onSort(column)} className="inline-flex items-center gap-1.5 text-left font-semibold transition-[color,transform] duration-200 ease-out hover:text-foreground active:scale-[0.98]">
         {label}
         <Icon className="size-3.5" aria-hidden="true" />
         <span className="sr-only">{active ? `${sortDirection === "asc" ? "sorted ascending" : "sorted descending"}` : "sort"}</span>
@@ -350,7 +350,7 @@ export function StaffTable() {
           <div className="flex justify-start lg:justify-end">
             <div className="flex items-center gap-1 rounded-lg border border-border p-1 text-xs" role="group" aria-label="Filter staff status">
               {(["active", "archived", "all"] as const).map((filter) => (
-                <button key={filter} type="button" onClick={() => setStatusFilter(filter)} className={`rounded-md px-3 py-2 capitalize transition-colors ${statusFilter === filter ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                <button key={filter} type="button" onClick={() => setStatusFilter(filter)} className={`rounded-md px-3 py-2 capitalize transition-[color,background-color,transform] duration-200 ease-out active:scale-[0.97] ${statusFilter === filter ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                   {filter}
                 </button>
               ))}
@@ -363,7 +363,7 @@ export function StaffTable() {
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-border">
           <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-background text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="bg-background text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <tr>
                 <SortableHeader label="Role" column="role" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
                 <SortableHeader label="Full Name" column="fullName" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
@@ -371,7 +371,7 @@ export function StaffTable() {
                 <SortableHeader label="Email" column="email" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
                 <SortableHeader label="Account Status" column="status" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
                 <SortableHeader label="Date Joined" column="dateJoined" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                <th className="px-4 py-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -380,7 +380,7 @@ export function StaffTable() {
               ) : filteredMembers.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">No staff profiles found.</td></tr>
               ) : sortedMembers.map((member) => (
-                <tr key={member.id} className="transition-colors hover:bg-accent/40">
+                <tr key={member.id} className="transition-colors duration-200 hover:bg-accent/40">
                   <td className="px-4 py-4"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs ${member.role === "Administrator" ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>{member.role}</span></td>
                   <td className="px-4 py-4 font-medium">{member.fullName}</td>
                   <td className="px-4 py-4 text-muted-foreground">{member.username}</td>
@@ -389,9 +389,9 @@ export function StaffTable() {
                   <td className="px-4 py-4 text-muted-foreground"><span className="inline-flex items-center gap-1.5"><CalendarDays className="size-3.5" aria-hidden="true" /> {formatDate(member.dateJoined)}</span></td>
                   <td className="px-4 py-4"><div className="flex justify-end gap-1">
                     {canManage ? <>
-                      <button type="button" title="Send password reset" aria-label={`Send password reset to ${member.fullName}`} disabled={actionId === member.id} onClick={() => void resetPassword(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"><KeyRound className="size-4" aria-hidden="true" /></button>
-                      <button type="button" title="Edit staff" aria-label={`Edit ${member.fullName}`} onClick={() => openEditModal(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"><Pencil className="size-4" aria-hidden="true" /></button>
-                      <button type="button" title={member.status === "archived" ? "Unarchive staff" : "Archive staff"} aria-label={`${member.status === "archived" ? "Unarchive" : "Archive"} ${member.fullName}`} disabled={actionId === member.id} onClick={() => void archiveMember(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50">{member.status === "archived" ? <ArchiveRestore className="size-4" aria-hidden="true" /> : <Archive className="size-4" aria-hidden="true" />}</button>
+                      <button type="button" title="Send password reset" aria-label={`Send password reset to ${member.fullName}`} disabled={actionId === member.id} onClick={() => void resetPassword(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95] disabled:opacity-50"><KeyRound className="size-4" aria-hidden="true" /></button>
+                      <button type="button" title="Edit staff" aria-label={`Edit ${member.fullName}`} onClick={() => openEditModal(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95]"><Pencil className="size-4" aria-hidden="true" /></button>
+                      <button type="button" title={member.status === "archived" ? "Unarchive staff" : "Archive staff"} aria-label={`${member.status === "archived" ? "Unarchive" : "Archive"} ${member.fullName}`} disabled={actionId === member.id} onClick={() => void archiveMember(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95] disabled:opacity-50">{member.status === "archived" ? <ArchiveRestore className="size-4" aria-hidden="true" /> : <Archive className="size-4" aria-hidden="true" />}</button>
                     </> : <span className="px-2 text-xs text-muted-foreground">Read only</span>}
                   </div></td>
                 </tr>
