@@ -13,7 +13,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { Archive, ArchiveRestore, CalendarDays, KeyRound, Pencil, Plus, Search, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, KeyRound, Pencil, Plus, Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,8 @@ function createActionDeadline() {
 
 type StaffRole = "Administrator" | "Operator";
 type StaffStatus = "active" | "archived";
+type SortKey = "role" | "fullName" | "username" | "email" | "status" | "dateJoined";
+type SortDirection = "asc" | "desc";
 
 type StaffMember = {
   id: string;
@@ -59,7 +61,9 @@ const emptyForm: StaffForm = {
 };
 
 function composeFullName(form: Pick<StaffForm, "firstName" | "middleInitial" | "lastName">) {
-  return [form.firstName.trim(), form.middleInitial.trim() ? `${form.middleInitial.trim()}.` : "", form.lastName.trim()].filter(Boolean).join(" ");
+  const lastName = form.lastName.trim();
+  const middleInitial = form.middleInitial.trim() ? `${form.middleInitial.trim()}.,` : "";
+  return [lastName ? `${lastName},` : "", middleInitial, form.firstName.trim()].filter(Boolean).join(" ");
 }
 
 function formatDate(value: Timestamp | null) {
@@ -74,10 +78,43 @@ function getFirestoreMessage(error: unknown) {
   return "Something went wrong. Please try again.";
 }
 
+function getStatusLabel(member: Pick<StaffMember, "status" | "emailVerified">) {
+  return member.status === "archived" ? "Archived" : member.emailVerified ? "Verified Active" : "Active";
+}
+
+function SortableHeader({
+  label,
+  column,
+  sortKey,
+  sortDirection,
+  onSort,
+}: {
+  label: string;
+  column: SortKey;
+  sortKey: SortKey;
+  sortDirection: SortDirection;
+  onSort: (column: SortKey) => void;
+}) {
+  const active = sortKey === column;
+  const Icon = active ? (sortDirection === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+
+  return (
+    <th aria-sort={active ? sortDirection === "asc" ? "ascending" : "descending" : "none"} className="px-4 py-3 font-medium">
+      <button type="button" onClick={() => onSort(column)} className="inline-flex items-center gap-1.5 text-left transition-colors hover:text-foreground">
+        {label}
+        <Icon className="size-3.5" aria-hidden="true" />
+        <span className="sr-only">{active ? `${sortDirection === "asc" ? "sorted ascending" : "sorted descending"}` : "sort"}</span>
+      </button>
+    </th>
+  );
+}
+
 export function StaffTable() {
   const [members, setMembers] = React.useState<StaffMember[]>([]);
   const [query, setQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"active" | "archived" | "all">("active");
+  const [sortKey, setSortKey] = React.useState<SortKey>("dateJoined");
+  const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
   const [form, setForm] = React.useState<StaffForm>(emptyForm);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [modalOpen, setModalOpen] = React.useState(false);
@@ -151,6 +188,15 @@ export function StaffTable() {
     setModalOpen(true);
     setMessage("");
     setError(false);
+  }
+
+  function toggleSort(nextKey: SortKey) {
+    if (sortKey === nextKey) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDirection("asc");
   }
 
   function openEditModal(member: StaffMember) {
@@ -270,6 +316,15 @@ export function StaffTable() {
     return matchesStatus && matchesQuery;
   });
 
+  const sortedMembers = [...filteredMembers].sort((left, right) => {
+    const comparison = sortKey === "dateJoined"
+      ? (left.dateJoined?.toMillis() ?? 0) - (right.dateJoined?.toMillis() ?? 0)
+      : (sortKey === "status" ? getStatusLabel(left) : left[sortKey]).toLocaleLowerCase().localeCompare(
+        (sortKey === "status" ? getStatusLabel(right) : right[sortKey]).toLocaleLowerCase(),
+      );
+    return sortDirection === "asc" ? comparison : -comparison;
+  });
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -310,12 +365,12 @@ export function StaffTable() {
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-background text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">Role</th>
-                <th className="px-4 py-3 font-medium">Full Name</th>
-                <th className="px-4 py-3 font-medium">Username</th>
-                <th className="px-4 py-3 font-medium">Email</th>
-                <th className="px-4 py-3 font-medium">Account Status</th>
-                <th className="px-4 py-3 font-medium">Date Joined</th>
+                <SortableHeader label="Role" column="role" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Full Name" column="fullName" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Username" column="username" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Email" column="email" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Account Status" column="status" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+                <SortableHeader label="Date Joined" column="dateJoined" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
@@ -324,13 +379,13 @@ export function StaffTable() {
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Loading staff…</td></tr>
               ) : filteredMembers.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">No staff profiles found.</td></tr>
-              ) : filteredMembers.map((member) => (
+              ) : sortedMembers.map((member) => (
                 <tr key={member.id} className="transition-colors hover:bg-accent/40">
                   <td className="px-4 py-4"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs ${member.role === "Administrator" ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>{member.role}</span></td>
                   <td className="px-4 py-4 font-medium">{member.fullName}</td>
                   <td className="px-4 py-4 text-muted-foreground">{member.username}</td>
                   <td className="px-4 py-4 text-muted-foreground">{member.email}</td>
-                  <td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${member.status === "archived" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}><span className={`size-1.5 rounded-full ${member.status === "archived" ? "bg-muted-foreground" : "bg-primary"}`} />{member.status === "archived" ? "Archived" : member.emailVerified ? "Verified Active" : "Active"}</span></td>
+                  <td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${member.status === "archived" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}><span className={`size-1.5 rounded-full ${member.status === "archived" ? "bg-muted-foreground" : "bg-primary"}`} />{getStatusLabel(member)}</span></td>
                   <td className="px-4 py-4 text-muted-foreground"><span className="inline-flex items-center gap-1.5"><CalendarDays className="size-3.5" aria-hidden="true" /> {formatDate(member.dateJoined)}</span></td>
                   <td className="px-4 py-4"><div className="flex justify-end gap-1">
                     {canManage ? <>
