@@ -62,8 +62,8 @@ const emptyForm: StaffForm = {
 
 function composeFullName(form: Pick<StaffForm, "firstName" | "middleInitial" | "lastName">) {
   const lastName = form.lastName.trim();
-  const middleInitial = form.middleInitial.trim() ? `${form.middleInitial.trim()}.,` : "";
-  return [lastName ? `${lastName},` : "", middleInitial, form.firstName.trim()].filter(Boolean).join(" ");
+  const middleInitial = form.middleInitial.trim() ? `${form.middleInitial.trim()}.` : "";
+  return [lastName, middleInitial, form.firstName.trim()].filter(Boolean).join(" ");
 }
 
 function formatDate(value: Timestamp | null) {
