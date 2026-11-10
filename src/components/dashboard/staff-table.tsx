@@ -36,6 +36,9 @@ type StaffMember = {
   id: string;
   uid: string;
   role: StaffRole;
+  firstName: string;
+  middleInitial: string;
+  lastName: string;
   fullName: string;
   username: string;
   email: string;
@@ -44,14 +47,20 @@ type StaffMember = {
   emailVerified: boolean;
 };
 
-type StaffForm = Pick<StaffMember, "role" | "fullName" | "username" | "email">;
+type StaffForm = Pick<StaffMember, "role" | "firstName" | "middleInitial" | "lastName" | "username" | "email">;
 
 const emptyForm: StaffForm = {
   role: "Operator",
-  fullName: "",
+  firstName: "",
+  middleInitial: "",
+  lastName: "",
   username: "",
   email: "",
 };
+
+function composeFullName(form: Pick<StaffForm, "firstName" | "middleInitial" | "lastName">) {
+  return [form.firstName.trim(), form.middleInitial.trim() ? `${form.middleInitial.trim()}.` : "", form.lastName.trim()].filter(Boolean).join(" ");
+}
 
 function formatDate(value: Timestamp | null) {
   return value ? value.toDate().toISOString().slice(0, 10) : "Pending";
@@ -97,11 +106,19 @@ export function StaffTable() {
       (snapshot) => {
         const nextMembers = snapshot.docs.map((item) => {
           const data = item.data();
+          const legacyFullName = typeof data.fullName === "string" ? data.fullName : "";
+          const legacyParts = legacyFullName.trim().split(/\s+/).filter(Boolean);
+          const firstName = typeof data.firstName === "string" ? data.firstName : legacyParts[0] ?? "";
+          const lastName = typeof data.lastName === "string" ? data.lastName : legacyParts.length > 1 ? legacyParts[legacyParts.length - 1] : "";
+          const middleInitial = typeof data.middleInitial === "string" ? data.middleInitial : "";
           return {
             id: item.id,
             uid: typeof data.uid === "string" ? data.uid : item.id,
             role: data.role === "Administrator" ? "Administrator" : "Operator",
-            fullName: typeof data.fullName === "string" ? data.fullName : "Unnamed staff",
+            firstName,
+            middleInitial,
+            lastName,
+            fullName: composeFullName({ firstName, middleInitial, lastName }) || legacyFullName || "Unnamed staff",
             username: typeof data.username === "string" ? data.username : "—",
             email: typeof data.email === "string" ? data.email : "—",
             dateJoined: data.dateJoined instanceof Timestamp ? data.dateJoined : null,
@@ -138,7 +155,7 @@ export function StaffTable() {
 
   function openEditModal(member: StaffMember) {
     setEditingId(member.id);
-    setForm({ role: member.role, fullName: member.fullName, username: member.username, email: member.email });
+    setForm({ role: member.role, firstName: member.firstName, middleInitial: member.middleInitial, lastName: member.lastName, username: member.username, email: member.email });
     setModalOpen(true);
     setMessage("");
     setError(false);
@@ -155,11 +172,22 @@ export function StaffTable() {
         throw new Error("Only administrators can manage staff members.");
       }
 
+      const nextForm = {
+        ...form,
+        firstName: form.firstName.trim(),
+        middleInitial: form.middleInitial.trim().replace(/\./g, "").slice(0, 1).toUpperCase(),
+        lastName: form.lastName.trim(),
+      };
+      if (!nextForm.firstName || !nextForm.lastName) {
+        throw new Error("First name and last name are required.");
+      }
+      const fullName = composeFullName(nextForm);
+
       if (editingId) {
         const previousMember = members.find((member) => member.id === editingId);
-        await updateDoc(doc(db, "staffs", editingId), { ...form, updatedAt: serverTimestamp() });
-        await setDoc(doc(db, "loginAliases", form.username.trim().toLowerCase()), { email: form.email.trim().toLowerCase(), uid: editingId });
-        if (previousMember && previousMember.username.toLowerCase() !== form.username.trim().toLowerCase()) {
+        await updateDoc(doc(db, "staffs", editingId), { ...nextForm, fullName, updatedAt: serverTimestamp() });
+        await setDoc(doc(db, "loginAliases", nextForm.username.trim().toLowerCase()), { email: nextForm.email.trim().toLowerCase(), uid: editingId });
+        if (previousMember && previousMember.username.toLowerCase() !== nextForm.username.trim().toLowerCase()) {
           await deleteDoc(doc(db, "loginAliases", previousMember.username.toLowerCase()));
         }
         setMessage("Staff information updated.");
@@ -171,7 +199,8 @@ export function StaffTable() {
 
         const uid = await createStaffInvite(normalizedEmail);
         await setDoc(doc(db, "staffs", uid), {
-          ...form,
+          ...nextForm,
+          fullName,
           uid,
           email: normalizedEmail,
           status: "active",
@@ -181,7 +210,7 @@ export function StaffTable() {
           updatedAt: serverTimestamp(),
           createdBy: auth.currentUser?.uid ?? null,
         });
-        await setDoc(doc(db, "loginAliases", form.username.trim().toLowerCase()), { email: normalizedEmail, uid });
+        await setDoc(doc(db, "loginAliases", nextForm.username.trim().toLowerCase()), { email: normalizedEmail, uid });
         setActionKind("verification");
         setActionDeadline(createActionDeadline());
         setActionSeconds(180);
@@ -319,9 +348,11 @@ export function StaffTable() {
             </div>
             <form className="mt-6 space-y-4" onSubmit={saveMember}>
               {!editingId ? <div className="rounded-xl border border-border bg-background p-4"><p className="flex items-center gap-2 text-sm font-semibold"><span aria-hidden="true">✉</span> Email verification required</p><p className="mt-2 pl-6 text-sm leading-6 text-muted-foreground">MediTap sends a verification link and password setup email to the recipient.</p></div> : null}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2 text-sm font-medium">Role<select value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as StaffRole }))} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-4 focus:ring-ring/20"><option>Administrator</option><option>Operator</option></select></label>
-                <label className="space-y-2 text-sm font-medium">Full Name<Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Juan Dela Cruz" required className="bg-background" /></label>
+              <label className="block space-y-2 text-sm font-medium">Role<select value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as StaffRole }))} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:border-ring focus:ring-4 focus:ring-ring/20"><option>Administrator</option><option>Operator</option></select></label>
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)]">
+                <label className="space-y-2 text-sm font-medium">First Name<Input value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} placeholder="Juan" required className="bg-background" /></label>
+                <label className="space-y-2 text-sm font-medium">Middle Initial<Input value={form.middleInitial} onChange={(event) => setForm((current) => ({ ...current, middleInitial: event.target.value.replace(/[^a-z]/gi, "").slice(0, 1).toUpperCase() }))} placeholder="D" maxLength={1} className="bg-background" /></label>
+                <label className="space-y-2 text-sm font-medium">Last Name<Input value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} placeholder="Dela Cruz" required className="bg-background" /></label>
               </div>
               <label className="block space-y-2 text-sm font-medium">Username<Input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} placeholder="jdelacruz" required className="bg-background" /></label>
               <label className="block space-y-2 text-sm font-medium">Email<Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="staff@meditap.ph" required className="bg-background" /></label>
