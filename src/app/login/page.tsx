@@ -34,7 +34,7 @@ export default function LoginPage() {
               MediTap
             </h1>
             <p className="mt-2 text-sm leading-6 text-brand-300/80">
-              Sign in with your authorized Firebase account.
+              Sign in with your authorized account.
             </p>
           </div>
 
