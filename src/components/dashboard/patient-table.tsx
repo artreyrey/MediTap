@@ -16,7 +16,7 @@ type Patient = {
 };
 
 function formatDate(value: FirestoreTimestamp | null) {
-  return value ? value.toDate().toISOString().slice(0, 10) : "—";
+  return value ? value.toDate().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—";
 }
 
 export function PatientTable() {
