@@ -393,7 +393,7 @@ export function StaffTable() {
                 <label className="space-y-2 text-sm font-medium text-foreground">Last Name<Input value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} placeholder="Dela Cruz" required className="bg-background font-sans text-foreground" /></label>
               </div>
               <label className="block space-y-2 text-sm font-medium text-foreground">Username<Input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} placeholder="jdelacruz" required className="bg-background font-sans text-foreground" /></label>
-              <label className="block space-y-2 text-sm font-medium text-foreground">Email<Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="staff@meditap.ph" required className="bg-background font-sans text-foreground" /></label>
+              <label className="block space-y-2 text-sm font-medium text-foreground">Email<Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="staff@meditap.ph" required disabled={editingId !== null} className="bg-background font-sans text-foreground" /></label>
               <div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Sending…" : editingId ? "Save Changes" : "Send verification email"}</Button></div>
             </form>
           </section>
