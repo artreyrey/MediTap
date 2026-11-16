@@ -22,6 +22,12 @@ service cloud.firestore {
         get(/databases/$(database)/documents/staffs/$(request.auth.uid)).data.status == 'active';
     }
 
+    function isReaderDevice() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/devices/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/devices/$(request.auth.uid)).data.enabled == true;
+    }
+
     match /staffs/{staffId} {
       allow read: if signedIn();
       allow create: if isAdministrator() && request.resource.data.uid == staffId;
@@ -44,6 +50,21 @@ service cloud.firestore {
     match /patients/{patientId} {
       allow read, create, update: if isActiveStaff();
       allow delete: if false;
+    }
+
+    match /counters/{counterId} {
+      allow read, create, update: if isActiveStaff();
+      allow delete: if false;
+    }
+
+    match /scanControl/current {
+      allow read: if isActiveStaff() || isReaderDevice();
+      allow create, update, delete: if isActiveStaff();
+    }
+
+    match /pendingScan/current {
+      allow read, delete: if isActiveStaff();
+      allow create, update: if isReaderDevice();
     }
   }
 }
