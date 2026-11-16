@@ -111,7 +111,7 @@ function SortableHeader({
 export function StaffTable() {
   const [members, setMembers] = React.useState<StaffMember[]>([]);
   const [query, setQuery] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState<"active" | "archived" | "all">("active");
+  const [statusFilter, setStatusFilter] = React.useState<"active" | "archived">("active");
   const [sortKey, setSortKey] = React.useState<SortKey>("dateJoined");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
   const [form, setForm] = React.useState<StaffForm>(emptyForm);
@@ -288,7 +288,7 @@ export function StaffTable() {
   }
 
   const filteredMembers = members.filter((member) => {
-    const matchesStatus = statusFilter === "all" || member.status === statusFilter;
+    const matchesStatus = member.status === statusFilter;
     const normalizedQuery = query.trim().toLowerCase();
     const matchesQuery = !normalizedQuery || [member.fullName, member.username, member.email, member.role].some((value) => value.toLowerCase().includes(normalizedQuery));
     return matchesStatus && matchesQuery;
@@ -327,11 +327,8 @@ export function StaffTable() {
           </label>
           <div className="flex justify-start lg:justify-end">
             <div className="flex items-center gap-1 rounded-lg border border-border p-1 text-xs" role="group" aria-label="Filter staff status">
-              {(["active", "archived", "all"] as const).map((filter) => (
-                <button key={filter} type="button" onClick={() => setStatusFilter(filter)} className={`rounded-md px-3 py-2 capitalize transition-[color,background-color,transform] duration-200 ease-out active:scale-[0.97] ${statusFilter === filter ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                  {filter}
-                </button>
-              ))}
+              <button type="button" onClick={() => setStatusFilter("active")} className={`rounded-md px-3 py-2 transition-[color,background-color,transform] duration-200 ease-out active:scale-[0.97] ${statusFilter === "active" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}>Active</button>
+              <button type="button" title="Show archived accounts" aria-label="Show archived accounts" onClick={() => setStatusFilter("archived")} className={`grid size-8 place-items-center rounded-md transition-[color,background-color,transform] duration-200 ease-out active:scale-[0.97] ${statusFilter === "archived" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}><Archive className="size-4" aria-hidden="true" /></button>
             </div>
           </div>
         </div>
@@ -366,9 +363,11 @@ export function StaffTable() {
                   <td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${member.status === "archived" ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}><span className={`size-1.5 rounded-full ${member.status === "archived" ? "bg-muted-foreground" : "bg-primary"}`} />{getStatusLabel(member)}</span></td>
                   <td className="px-4 py-4 text-muted-foreground"><span className="inline-flex items-center gap-1.5"><CalendarDays className="size-3.5" aria-hidden="true" /> {formatDate(member.dateJoined)}</span></td>
                   <td className="px-4 py-4"><div className="flex justify-end gap-1">
-                    {canManage ? <>
+                    {canManage ? member.status === "archived" ? (
+                      <button type="button" title="Restore staff" aria-label={`Restore ${member.fullName}`} disabled={actionId === member.id} onClick={() => void archiveMember(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95] disabled:opacity-50"><ArchiveRestore className="size-4" aria-hidden="true" /></button>
+                    ) : <>
                       <button type="button" title="Edit staff" aria-label={`Edit ${member.fullName}`} onClick={() => openEditModal(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95]"><Pencil className="size-4" aria-hidden="true" /></button>
-                      <button type="button" title={member.status === "archived" ? "Unarchive staff" : "Archive staff"} aria-label={`${member.status === "archived" ? "Unarchive" : "Archive"} ${member.fullName}`} disabled={actionId === member.id} onClick={() => void archiveMember(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95] disabled:opacity-50">{member.status === "archived" ? <ArchiveRestore className="size-4" aria-hidden="true" /> : <Archive className="size-4" aria-hidden="true" />}</button>
+                      <button type="button" title="Archive staff" aria-label={`Archive ${member.fullName}`} disabled={actionId === member.id} onClick={() => void archiveMember(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95] disabled:opacity-50"><Archive className="size-4" aria-hidden="true" /></button>
                     </> : <span className="px-2 text-xs text-muted-foreground">Read only</span>}
                   </div></td>
                 </tr>
