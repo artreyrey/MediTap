@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Eye, Pencil } from "lucide-react";
+import { Eye, Pencil, Plus, ScanLine } from "lucide-react";
 import { collection, onSnapshot, Timestamp as FirestoreTimestamp } from "firebase/firestore";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { db } from "@/lib/firebase";
 
 type Patient = {
@@ -21,6 +23,7 @@ function formatDate(value: FirestoreTimestamp | null) {
 
 export function PatientTable() {
   const [patients, setPatients] = React.useState<Patient[]>([]);
+  const [query, setQuery] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
@@ -50,6 +53,11 @@ export function PatientTable() {
     return unsubscribe;
   }, []);
 
+  const filteredPatients = patients.filter((patient) => {
+    const search = query.trim().toLowerCase();
+    return !search || [patient.patientId, patient.name, patient.number, patient.address].some((value) => value.toLowerCase().includes(search));
+  });
+
   return (
     <div className="space-y-5">
       <div>
@@ -59,6 +67,15 @@ export function PatientTable() {
       </div>
 
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
+        <div className="grid gap-3 border-b border-border pb-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+          <div className="flex justify-start">
+            <Button size="sm" className="rounded-lg" disabled title="Add patient — coming soon"><Plus className="size-4" aria-hidden="true" /> Add Patient</Button>
+          </div>
+          <label className="relative w-full max-w-sm">
+            <ScanLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Scan to search" className="bg-background pl-9" aria-label="Scan to search patients" />
+          </label>
+        </div>
         {error ? <p role="alert" className="mb-4 text-sm text-rose-300">{error}</p> : null}
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full min-w-[900px] text-left text-sm">
@@ -75,9 +92,9 @@ export function PatientTable() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Loading patients…</td></tr>
-              ) : patients.length === 0 ? (
+              ) : filteredPatients.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No patient records found.</td></tr>
-              ) : patients.map((patient) => (
+              ) : filteredPatients.map((patient) => (
                 <tr key={patient.id} className="transition-colors duration-200 hover:bg-accent/40">
                   <td className="px-4 py-4 font-medium">{patient.patientId}</td>
                   <td className="px-4 py-4 font-medium">{patient.name}</td>
