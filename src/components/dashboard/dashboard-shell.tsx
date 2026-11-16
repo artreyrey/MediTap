@@ -10,6 +10,7 @@ import {
   ScanLine,
   Sun,
   IdCard,
+  CircleUserRound,
   UsersRound,
 } from "lucide-react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/dashboard/scan", label: "Scan", icon: ScanLine },
   { href: "/dashboard/staff", label: "Staff Information", icon: UsersRound },
   { href: "/dashboard/patients", label: "Patient Information", icon: IdCard },
+  { href: "/dashboard/profile", label: "Profile", icon: CircleUserRound },
 ];
 
 type Theme = "light" | "dark";
