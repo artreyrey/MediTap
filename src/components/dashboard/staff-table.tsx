@@ -381,7 +381,7 @@ export function StaffTable() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="presentation">
           <section role="dialog" aria-modal="true" aria-labelledby="staff-modal-title" className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
-              <div><h2 id="staff-modal-title" className="text-xl font-semibold">{editingId ? "Edit Staff" : "Add staff member"}</h2><p className="mt-1 text-sm text-muted-foreground">The staff record is added after the recipient verifies the email and sets a password.</p></div>
+              <div><h2 id="staff-modal-title" className="text-xl font-semibold">{editingId ? "Edit Staff" : "Add staff member"}</h2></div>
               <button type="button" onClick={() => setModalOpen(false)} className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close staff form"><X className="size-4" aria-hidden="true" /></button>
             </div>
             <form className="mt-6 space-y-4 font-sans text-foreground" onSubmit={saveMember}>
@@ -394,7 +394,6 @@ export function StaffTable() {
               </div>
               <label className="block space-y-2 text-sm font-medium text-foreground">Username<Input value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} placeholder="jdelacruz" required className="bg-background font-sans text-foreground" /></label>
               <label className="block space-y-2 text-sm font-medium text-foreground">Email<Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="staff@meditap.ph" required className="bg-background font-sans text-foreground" /></label>
-              <p className="text-xs leading-5 text-muted-foreground">This creates the Firestore profile. The matching Firebase Authentication account must also exist before password reset can work.</p>
               <div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Sending…" : editingId ? "Save Changes" : "Send verification email"}</Button></div>
             </form>
           </section>
