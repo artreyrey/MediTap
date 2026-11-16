@@ -12,8 +12,7 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, KeyRound, Pencil, Plus, Search, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, Pencil, Plus, Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,7 +125,6 @@ export function StaffTable() {
   const [error, setError] = React.useState(false);
   const [actionDeadline, setActionDeadline] = React.useState<number | null>(null);
   const [actionSeconds, setActionSeconds] = React.useState(0);
-  const [actionKind, setActionKind] = React.useState<"verification" | "password-reset" | null>(null);
 
   React.useEffect(() => {
     if (!actionDeadline) return;
@@ -257,7 +255,6 @@ export function StaffTable() {
           createdBy: auth.currentUser?.uid ?? null,
         });
         await setDoc(doc(db, "loginAliases", nextForm.username.trim().toLowerCase()), { email: normalizedEmail, uid });
-        setActionKind("verification");
         setActionDeadline(createActionDeadline());
         setActionSeconds(180);
         setMessage("Staff profile added. Verification and password setup emails were sent.");
@@ -285,25 +282,6 @@ export function StaffTable() {
     } catch (archiveError) {
       setError(true);
       setMessage(getFirestoreMessage(archiveError));
-    } finally {
-      setActionId(null);
-    }
-  }
-
-  async function resetPassword(member: StaffMember) {
-    if (!canManage) return;
-    setActionId(member.id);
-    setMessage("");
-    setError(false);
-    try {
-      await sendPasswordResetEmail(auth, member.email);
-      setActionKind("password-reset");
-      setActionDeadline(createActionDeadline());
-      setActionSeconds(180);
-      setMessage(`If ${member.email} has an account, a reset email is on its way.`);
-    } catch (resetError) {
-      setError(true);
-      setMessage(getFirestoreMessage(resetError));
     } finally {
       setActionId(null);
     }
@@ -359,7 +337,7 @@ export function StaffTable() {
         </div>
 
         {message ? <p role={error ? "alert" : "status"} className={`mb-2 mt-4 text-sm ${error ? "text-rose-300" : "text-primary"}`}>{message}</p> : null}
-        {actionDeadline !== null ? <p className={`mb-4 text-xs ${actionSeconds > 0 ? "text-muted-foreground" : "text-rose-300"}`}>{actionSeconds > 0 ? `${actionKind === "verification" ? "Verification and password setup links" : "Password reset link"} expire in ${formatCountdown(actionSeconds)}.` : `${actionKind === "verification" ? "Verification and password setup links" : "Password reset link"} expired. Send a new one to restart the timer.`}</p> : null}
+        {actionDeadline !== null ? <p className={`mb-4 text-xs ${actionSeconds > 0 ? "text-muted-foreground" : "text-rose-300"}`}>{actionSeconds > 0 ? `Verification and password setup links expire in ${formatCountdown(actionSeconds)}.` : "Verification and password setup links expired. Send a new one to restart the timer."}</p> : null}
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-border">
           <table className="w-full min-w-[900px] text-left text-sm">
@@ -389,7 +367,6 @@ export function StaffTable() {
                   <td className="px-4 py-4 text-muted-foreground"><span className="inline-flex items-center gap-1.5"><CalendarDays className="size-3.5" aria-hidden="true" /> {formatDate(member.dateJoined)}</span></td>
                   <td className="px-4 py-4"><div className="flex justify-end gap-1">
                     {canManage ? <>
-                      <button type="button" title="Send password reset" aria-label={`Send password reset to ${member.fullName}`} disabled={actionId === member.id} onClick={() => void resetPassword(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95] disabled:opacity-50"><KeyRound className="size-4" aria-hidden="true" /></button>
                       <button type="button" title="Edit staff" aria-label={`Edit ${member.fullName}`} onClick={() => openEditModal(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95]"><Pencil className="size-4" aria-hidden="true" /></button>
                       <button type="button" title={member.status === "archived" ? "Unarchive staff" : "Archive staff"} aria-label={`${member.status === "archived" ? "Unarchive" : "Archive"} ${member.fullName}`} disabled={actionId === member.id} onClick={() => void archiveMember(member)} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent hover:text-foreground active:scale-[0.95] disabled:opacity-50">{member.status === "archived" ? <ArchiveRestore className="size-4" aria-hidden="true" /> : <Archive className="size-4" aria-hidden="true" />}</button>
                     </> : <span className="px-2 text-xs text-muted-foreground">Read only</span>}
