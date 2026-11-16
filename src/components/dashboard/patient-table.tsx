@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Eye, Pencil, Plus, ScanLine } from "lucide-react";
+import { Eye, Pencil, Plus, Printer, ScanLine } from "lucide-react";
 import { collection, onSnapshot, Timestamp as FirestoreTimestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
@@ -104,6 +104,7 @@ export function PatientTable() {
                   <td className="px-4 py-4"><div className="flex justify-end gap-1">
                     <button type="button" disabled title="Show patient information — coming soon" aria-label={`Show information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Eye className="size-4" aria-hidden="true" /></button>
                     <button type="button" disabled title="Edit patient information — coming soon" aria-label={`Edit information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Pencil className="size-4" aria-hidden="true" /></button>
+                    <button type="button" disabled title="Print patient information — coming soon" aria-label={`Print information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Printer className="size-4" aria-hidden="true" /></button>
                   </div></td>
                 </tr>
               ))}
