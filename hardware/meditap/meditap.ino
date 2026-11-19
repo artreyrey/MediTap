@@ -37,7 +37,7 @@ unsigned long firebaseStartedAt = 0;
 unsigned long lastReaderStatusAttempt = 0;
 const unsigned long IDLE_CHECK_INTERVAL_MS = 5000;
 const unsigned long ACTIVE_CHECK_INTERVAL_MS = 500;
-const unsigned long AUTH_RETRY_INTERVAL_MS = 30000;
+const unsigned long AUTH_RETRY_INTERVAL_MS = 300000;
 const unsigned long READER_STATUS_RETRY_INTERVAL_MS = 5000;
 
 String firestoreTimestamp() {
@@ -221,7 +221,7 @@ void loop() {
       Serial.println("Firebase not connected yet. Still trying; check reader email, password, and devices permission.");
     }
     if (millis() - firebaseStartedAt > AUTH_RETRY_INTERVAL_MS) {
-      Serial.println("Restarting Firebase authentication...");
+      Serial.println("Retrying Firebase authentication after a 5-minute cooldown...");
       deinitializeApp(app);
       startFirebaseAuthentication();
     }
