@@ -9,14 +9,18 @@ import {
   Search,
   ScanLine,
   Sun,
+  CheckCircle2,
+  CircleAlert,
+  X,
   IdCard,
   CircleUserRound,
   UsersRound,
 } from "lucide-react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { doc, onSnapshot } from "firebase/firestore";
 
 import { BrandLogo } from "@/components/brand-logo";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -37,6 +41,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = React.useState<User | null>(null);
   const [checkingAuth, setCheckingAuth] = React.useState(true);
+  const [readerToast, setReaderToast] = React.useState<"connected" | "failed" | null>(null);
   const [theme, setTheme] = React.useState<Theme>(() => (
     typeof window !== "undefined" && window.localStorage.getItem("meditap-theme") === "light" ? "light" : "dark"
   ));
@@ -63,6 +68,29 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
     return unsubscribe;
   }, [router]);
+
+  React.useEffect(() => {
+    if (!user) return;
+
+    let confirmed = false;
+    const timeout = window.setTimeout(() => {
+      if (!confirmed) setReaderToast("failed");
+    }, 20000);
+    const unsubscribe = onSnapshot(doc(db, "readerStatus", "current"), (snapshot) => {
+      if (snapshot.data()?.state !== "connected") return;
+      confirmed = true;
+      window.clearTimeout(timeout);
+      setReaderToast("connected");
+    }, () => {
+      window.clearTimeout(timeout);
+      setReaderToast("failed");
+    });
+
+    return () => {
+      window.clearTimeout(timeout);
+      unsubscribe();
+    };
+  }, [user]);
 
   async function handleSignOut() {
     await signOut(auth);
@@ -135,6 +163,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="lg:pl-64">
+        {readerToast ? <div role="status" className={`fixed right-4 top-4 z-[60] flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl border p-4 shadow-lg ${readerToast === "connected" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"}`}><span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${readerToast === "connected" ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"}`}>{readerToast === "connected" ? <CheckCircle2 className="size-4" aria-hidden="true" /> : <CircleAlert className="size-4" aria-hidden="true" />}</span><div className="min-w-0 flex-1"><p className="text-sm font-semibold">{readerToast === "connected" ? "Firebase authentication finished" : "Firebase authentication not confirmed"}</p><p className="mt-1 text-xs leading-5">{readerToast === "connected" ? "ESP32 is ready for MediTap RFID requests." : "The ESP32 is retrying its Firebase connection."}</p></div><button type="button" onClick={() => setReaderToast(null)} className="grid size-7 shrink-0 place-items-center rounded-md transition-colors hover:bg-black/10 dark:hover:bg-white/10" aria-label="Dismiss Firebase status notification"><X className="size-4" aria-hidden="true" /></button></div> : null}
         <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur-xl">
           <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
             <Link href="/dashboard" className="lg:hidden" aria-label="MediTap dashboard">

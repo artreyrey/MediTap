@@ -66,5 +66,11 @@ service cloud.firestore {
       allow read, delete: if isActiveStaff();
       allow create, update: if isReaderDevice();
     }
+
+    match /readerStatus/current {
+      allow read: if isActiveStaff();
+      allow create, update: if isReaderDevice();
+      allow delete: if false;
+    }
   }
 }

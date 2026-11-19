@@ -29,9 +29,16 @@ bool scanRequested = false;
 bool sentForCurrentRequest = false;
 bool readySentForCurrentRequest = false;
 bool timeReady = false;
+bool firebaseConnectedLogged = false;
+bool firebaseConnectionWarningLogged = false;
+bool readerStatusReported = false;
 unsigned long lastCheck = 0;
+unsigned long firebaseStartedAt = 0;
+unsigned long lastReaderStatusAttempt = 0;
 const unsigned long IDLE_CHECK_INTERVAL_MS = 5000;
 const unsigned long ACTIVE_CHECK_INTERVAL_MS = 500;
+const unsigned long AUTH_RETRY_INTERVAL_MS = 30000;
+const unsigned long READER_STATUS_RETRY_INTERVAL_MS = 5000;
 
 String firestoreTimestamp() {
   time_t now = time(nullptr);
@@ -64,7 +71,7 @@ bool isScanRequested() {
   );
 
   if (firebaseClient.lastError().code() != 0) {
-    Serial.println("Scan request error: " + firebaseClient.lastError().message());
+    Serial.println("MediTap/Firebase request error: " + firebaseClient.lastError().message());
     return false;
   }
 
@@ -144,6 +151,43 @@ bool sendReaderReady() {
   return true;
 }
 
+bool sendReaderConnectedStatus() {
+  Document<Values::Value> document("state", Values::Value(Values::StringValue("connected")));
+  String fields = "state";
+
+  if (timeReady) {
+    document.add("authenticatedAt", Values::Value(Values::TimestampValue(firestoreTimestamp())));
+    fields += ",authenticatedAt";
+  }
+
+  PatchDocumentOptions options{DocumentMask(fields), DocumentMask{}, Precondition{}};
+  Docs.patch(
+    firebaseClient,
+    Firestore::Parent(FIREBASE_PROJECT_ID),
+    "readerStatus/current",
+    options,
+    document
+  );
+
+  if (firebaseClient.lastError().code() != 0) {
+    Serial.println("Reader status upload failed: " + firebaseClient.lastError().message());
+    return false;
+  }
+
+  Serial.println("MediTap website notified: Firebase authentication finished.");
+  return true;
+}
+
+void startFirebaseAuthentication() {
+  initializeApp(firebaseClient, app, getAuth(userAuth));
+  app.getApp<Firestore::Documents>(Docs);
+  firebaseStartedAt = millis();
+  firebaseConnectionWarningLogged = false;
+  firebaseConnectedLogged = false;
+  readerStatusReported = false;
+  Serial.println("Connecting to Firebase and MediTap website scan channel...");
+}
+
 void setup() {
   Serial.begin(115200);
   SPI.begin(18, 19, 23, 5);
@@ -156,23 +200,42 @@ void setup() {
     delay(300);
   }
 
-  Serial.println("\nWi-Fi connected.");
+  Serial.println("\nESP32 connected to hotspot: " + String(WIFI_SSID));
+  Serial.println("ESP32 IP address: " + WiFi.localIP().toString());
   syncTime();
 
   sslClient.setInsecure();
   sslClient.setConnectionTimeout(1000);
   sslClient.setHandshakeTimeout(5);
 
-  initializeApp(firebaseClient, app, getAuth(userAuth), 120000);
-  app.getApp<Firestore::Documents>(Docs);
-  Serial.println("MediTap RFID reader ready.");
+  // Start Firebase once; app.loop() maintains the session and refreshes tokens afterward.
+  startFirebaseAuthentication();
 }
 
 void loop() {
   app.loop();
 
   if (!app.ready()) {
+    if (!firebaseConnectionWarningLogged && millis() - firebaseStartedAt > 15000) {
+      firebaseConnectionWarningLogged = true;
+      Serial.println("Firebase not connected yet. Still trying; check reader email, password, and devices permission.");
+    }
+    if (millis() - firebaseStartedAt > AUTH_RETRY_INTERVAL_MS) {
+      Serial.println("Restarting Firebase authentication...");
+      deinitializeApp(app);
+      startFirebaseAuthentication();
+    }
     return;
+  }
+
+  if (!firebaseConnectedLogged) {
+    firebaseConnectedLogged = true;
+    Serial.println("Firebase connected. MediTap website scan channel ready.");
+  }
+
+  if (!readerStatusReported && millis() - lastReaderStatusAttempt > READER_STATUS_RETRY_INTERVAL_MS) {
+    lastReaderStatusAttempt = millis();
+    readerStatusReported = sendReaderConnectedStatus();
   }
 
   const unsigned long checkInterval = scanRequested ? ACTIVE_CHECK_INTERVAL_MS : IDLE_CHECK_INTERVAL_MS;
@@ -188,6 +251,7 @@ void loop() {
       scanRequested = true;
       sentForCurrentRequest = false;
       readySentForCurrentRequest = false;
+      Serial.println("MediTap website requested an RFID scan.");
     }
 
     if (scanRequested && !readySentForCurrentRequest) {
