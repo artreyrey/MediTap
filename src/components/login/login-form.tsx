@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { auth, db } from "@/lib/firebase";
 
 const ACTION_WINDOW_MS = 3 * 60 * 1000;
+const LOGIN_ATTEMPT_LIMIT = 3;
+const LOGIN_LOCKOUT_MS = 3 * 60 * 1000;
 
 function formatCountdown(seconds: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
@@ -60,20 +62,34 @@ export function LoginForm() {
   const [verificationSeconds, setVerificationSeconds] = React.useState(0);
   const [resetDeadline, setResetDeadline] = React.useState<number | null>(null);
   const [resetSeconds, setResetSeconds] = React.useState(0);
+  const [failedAttempts, setFailedAttempts] = React.useState(0);
+  const [loginLockDeadline, setLoginLockDeadline] = React.useState<number | null>(null);
+  const [loginLockSeconds, setLoginLockSeconds] = React.useState(0);
 
   React.useEffect(() => {
-    if (!verificationDeadline && !resetDeadline) return;
+    if (!verificationDeadline && !resetDeadline && !loginLockDeadline) return;
 
     const updateCountdowns = () => {
       const now = Date.now();
       if (verificationDeadline) setVerificationSeconds(Math.max(0, Math.ceil((verificationDeadline - now) / 1000)));
       if (resetDeadline) setResetSeconds(Math.max(0, Math.ceil((resetDeadline - now) / 1000)));
+      if (loginLockDeadline) {
+        const remaining = Math.max(0, Math.ceil((loginLockDeadline - now) / 1000));
+        setLoginLockSeconds(remaining);
+
+        if (remaining === 0) {
+          setLoginLockDeadline(null);
+          setFailedAttempts(0);
+          setError(false);
+          setMessage("You can try signing in again.");
+        }
+      }
     };
 
     updateCountdowns();
     const timer = window.setInterval(updateCountdowns, 1000);
     return () => window.clearInterval(timer);
-  }, [resetDeadline, verificationDeadline]);
+  }, [loginLockDeadline, resetDeadline, verificationDeadline]);
 
   function showMessage(nextMessage: string, isError = false) {
     setError(isError);
@@ -92,6 +108,9 @@ export function LoginForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (loginLockDeadline && loginLockDeadline > Date.now()) return;
+
     setLoading(true);
     setMessage("");
     setError(false);
@@ -107,11 +126,28 @@ export function LoginForm() {
         setVerificationSeconds(180);
         showMessage("Verify your email first. A new verification link was sent.", true);
       } else {
+        setFailedAttempts(0);
         await updateDoc(doc(db, "staffs", credential.user.uid), { emailVerified: true });
         router.replace("/dashboard");
       }
     } catch (authError) {
-      showMessage(getAuthErrorMessage(authError), true);
+      if (
+        authError instanceof FirebaseError &&
+        ["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"].includes(authError.code)
+      ) {
+        const nextAttempts = failedAttempts + 1;
+
+        if (nextAttempts >= LOGIN_ATTEMPT_LIMIT) {
+          setLoginLockDeadline(Date.now() + LOGIN_LOCKOUT_MS);
+          setLoginLockSeconds(180);
+          showMessage("Too many incorrect password attempts. Try again in 03:00.", true);
+        } else {
+          setFailedAttempts(nextAttempts);
+          showMessage(`Incorrect email or password. Attempts left: ${LOGIN_ATTEMPT_LIMIT - nextAttempts}.`, true);
+        }
+      } else {
+        showMessage(getAuthErrorMessage(authError), true);
+      }
     } finally {
       setLoading(false);
     }
@@ -158,6 +194,7 @@ export function LoginForm() {
             onChange={(event) => setIdentifier(event.target.value)}
             placeholder="e.g. nurse1 or nurse@gmail.com"
             className="border-brand-600/65 bg-white/[0.04] text-brand-100 placeholder:text-brand-300/55 focus:border-brand-300/80 focus:ring-brand-300/20"
+            disabled={loginLockSeconds > 0}
             required
           />
         </div>
@@ -174,11 +211,12 @@ export function LoginForm() {
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Enter your password…"
             className="border-brand-600/65 bg-white/[0.04] text-brand-100 placeholder:text-brand-300/55 focus:border-brand-300/80 focus:ring-brand-300/20"
+            disabled={loginLockSeconds > 0}
             required
           />
         </div>
 
-        <Button type="submit" size="lg" className="w-full bg-brand-100 text-brand-950 shadow-none hover:bg-white" disabled={loading}>
+        <Button type="submit" size="lg" className="w-full bg-brand-100 text-brand-950 shadow-none hover:bg-white" disabled={loading || loginLockSeconds > 0}>
           {loading ? "Working…" : "Log In"}
         </Button>
       </form>
@@ -208,6 +246,11 @@ export function LoginForm() {
       {resetDeadline !== null ? (
         <p className={`mt-2 text-center text-xs ${resetSeconds > 0 ? "text-brand-300" : "text-rose-300"}`}>
           {resetSeconds > 0 ? `Password reset link expires in ${formatCountdown(resetSeconds)}.` : "Password reset link expired. Request a new one."}
+        </p>
+      ) : null}
+      {loginLockDeadline !== null ? (
+        <p className="mt-2 text-center text-xs text-rose-300">
+          {loginLockSeconds > 0 ? `Sign-in is locked for ${formatCountdown(loginLockSeconds)}.` : "You can try signing in again."}
         </p>
       ) : null}
     </>
