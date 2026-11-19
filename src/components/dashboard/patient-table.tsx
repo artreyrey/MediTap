@@ -31,6 +31,7 @@ export function PatientTable() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [scanState, setScanState] = React.useState<"idle" | "waiting" | "form">("idle");
+  const [readerStatus, setReaderStatus] = React.useState<"connecting" | "ready" | "unavailable">("connecting");
   const [rfidUID, setRfidUID] = React.useState("");
   const [form, setForm] = React.useState<PatientForm>(emptyForm);
   const [saving, setSaving] = React.useState(false);
@@ -62,8 +63,13 @@ export function PatientTable() {
   React.useEffect(() => {
     if (scanState !== "waiting") return;
 
+    const unavailableTimer = window.setTimeout(() => setReaderStatus((status) => status === "connecting" ? "unavailable" : status), 6000);
+
     const unsubscribe = onSnapshot(pendingScanRef, async (snapshot) => {
-      const uid = typeof snapshot.data()?.uid === "string" ? snapshot.data()?.uid.trim().toUpperCase() : "";
+      const data = snapshot.data();
+      if (data?.state === "ready") setReaderStatus("ready");
+
+      const uid = typeof data?.uid === "string" ? data.uid.trim().toUpperCase() : "";
       if (!uid) return;
 
       try {
@@ -87,11 +93,15 @@ export function PatientTable() {
       }
     });
 
-    return unsubscribe;
+    return () => {
+      window.clearTimeout(unavailableTimer);
+      unsubscribe();
+    };
   }, [pendingScanRef, scanControlRef, scanState]);
 
   async function startScan() {
     setError("");
+    setReaderStatus("connecting");
     setScanState("waiting");
     try {
       await deleteDoc(pendingScanRef);
@@ -193,7 +203,7 @@ export function PatientTable() {
 
       {scanState !== "idle" ? <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="patient-modal-title" className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4"><div><h2 id="patient-modal-title" className="text-xl font-semibold">{scanState === "waiting" ? "Tap RFID card" : "Add Patient"}</h2><p className="mt-1 text-sm text-muted-foreground">{scanState === "waiting" ? "Hold an unregistered RFID card near the reader." : "Complete the patient details for the scanned card."}</p></div><button type="button" onClick={() => void closeAddPatient()} className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close Add Patient"><X className="size-4" aria-hidden="true" /></button></div>
-        {scanState === "waiting" ? <div className="mt-6 rounded-xl border border-border bg-background p-5 text-center"><ScanLine className="mx-auto size-8 text-primary" aria-hidden="true" /><p className="mt-3 text-sm font-medium">Waiting for RFID UID…</p><p className="mt-1 text-xs text-muted-foreground">Cancel if you do not want to scan a card.</p></div> : <form className="mt-6 space-y-4" onSubmit={savePatient}>
+        {scanState === "waiting" ? <div className="mt-6 rounded-xl border border-border bg-background p-5 text-center"><ScanLine className="mx-auto size-8 text-primary" aria-hidden="true" /><div className="mt-3 flex items-center justify-center gap-2 text-sm font-medium"><span className={`size-2.5 rounded-full ${readerStatus === "ready" ? "bg-emerald-500" : readerStatus === "unavailable" ? "bg-rose-500" : "bg-amber-400"}`} aria-hidden="true" /><span>{readerStatus === "ready" ? "RFID reader ready" : readerStatus === "unavailable" ? "RFID reader disconnected" : "Connecting to RFID reader…"}</span></div><p className="mt-1 text-xs text-muted-foreground">{readerStatus === "ready" ? "Tap an unregistered RFID card near the reader." : "Waiting for the reader response…"}</p><p className="mt-3 text-xs text-muted-foreground">Cancel if you do not want to scan a card.</p></div> : <form className="mt-6 space-y-4" onSubmit={savePatient}>
           <label className="block space-y-2 text-sm font-medium">RFID UID<Input value={rfidUID} readOnly className="bg-background" /></label><label className="block space-y-2 text-sm font-medium">Name<Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Lastname, Firstname MI." required className="bg-background" /></label><label className="block space-y-2 text-sm font-medium">Address<Input value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="Barangay, City" required className="bg-background" /></label><label className="block space-y-2 text-sm font-medium">Birthdate<Input type="date" value={form.birthDate} onChange={(event) => setForm((current) => ({ ...current, birthDate: event.target.value }))} required className="bg-background" /></label><div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => void closeAddPatient()}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save Patient"}</Button></div>
         </form>}
       </section></div> : null}

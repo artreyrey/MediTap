@@ -24,6 +24,9 @@ graphify-out/
 *.pem
 *.log
 
+# Arduino reader credentials
+hardware/meditap/secrets.h
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
