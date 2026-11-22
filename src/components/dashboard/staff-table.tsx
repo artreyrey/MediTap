@@ -125,6 +125,7 @@ export function StaffTable() {
   const [error, setError] = React.useState(false);
   const [actionDeadline, setActionDeadline] = React.useState<number | null>(null);
   const [actionSeconds, setActionSeconds] = React.useState(0);
+  const [accessDenied, setAccessDenied] = React.useState(false);
 
   React.useEffect(() => {
     if (!actionDeadline) return;
@@ -171,8 +172,13 @@ export function StaffTable() {
         setLoading(false);
       },
       (snapshotError) => {
+        if (snapshotError instanceof FirebaseError && snapshotError.code === "permission-denied") {
+          setAccessDenied(true);
+          setMessage("Staff Information is available only to administrators.");
+        } else {
+          setMessage(getFirestoreMessage(snapshotError));
+        }
         setError(true);
-        setMessage(getFirestoreMessage(snapshotError));
         setLoading(false);
       },
     );
@@ -302,6 +308,10 @@ export function StaffTable() {
       );
     return sortDirection === "asc" ? comparison : -comparison;
   });
+
+  if (accessDenied) {
+    return <div className="rounded-2xl border border-border bg-card p-6 shadow-sm"><p className="text-sm font-medium text-primary">Access restricted</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Staff Information</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">Only administrators can view and manage staff accounts.</p></div>;
+  }
 
   return (
     <div className="space-y-5">

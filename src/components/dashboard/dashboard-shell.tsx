@@ -15,9 +15,10 @@ import {
   UsersRound,
 } from "lucide-react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 import { BrandLogo } from "@/components/brand-logo";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { rfidReader, type ReaderStatus } from "@/lib/rfid-serial";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = React.useState<User | null>(null);
   const [checkingAuth, setCheckingAuth] = React.useState(true);
+  const [isAdministrator, setIsAdministrator] = React.useState(false);
   const [readerStatus, setReaderStatus] = React.useState<ReaderStatus>(rfidReader.getStatus());
   const [theme, setTheme] = React.useState<Theme>(() => (
     typeof window !== "undefined" && window.localStorage.getItem("meditap-theme") === "light" ? "light" : "dark"
@@ -55,6 +57,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (!currentUser || !currentUser.emailVerified) {
         setUser(null);
+        setIsAdministrator(false);
         setCheckingAuth(false);
         void signOut(auth).finally(() => router.replace("/login"));
         return;
@@ -66,6 +69,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
     return unsubscribe;
   }, [router]);
+
+  React.useEffect(() => {
+    if (!user) return;
+
+    void getDoc(doc(db, "staffs", user.uid)).then((snapshot) => {
+      const profile = snapshot.data();
+      setIsAdministrator(profile?.role === "Administrator" && profile?.status === "active");
+    }).catch(() => setIsAdministrator(false));
+  }, [user]);
 
   React.useEffect(() => {
     const unsubscribe = rfidReader.subscribe(setReaderStatus);
@@ -92,6 +104,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const displayName = user.displayName || user.email?.split("@")[0] || "Staff";
   const initial = displayName.charAt(0).toUpperCase();
+  const visibleNavItems = navItems.filter((item) => item.href !== "/dashboard/staff" || isAdministrator);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -116,7 +129,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           >
             <UsersRound className="size-4" aria-hidden="true" /> Overview
           </Link>
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {visibleNavItems.map(({ href, label, icon: Icon }) => {
             const active = isActivePath(pathname, href);
             return (
               <Link
@@ -193,7 +206,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <Link href="/dashboard" className={cn("whitespace-nowrap rounded-md px-3 py-2 text-xs font-medium", pathname === "/dashboard" && "bg-accent")}>
               Overview
             </Link>
-            {navItems.map(({ href, label, icon: Icon }) => (
+            {visibleNavItems.map(({ href, label, icon: Icon }) => (
               <Link key={href} href={href} className={cn("flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-xs font-medium text-muted-foreground", isActivePath(pathname, href) && "bg-accent text-foreground")}>
                 <Icon className="size-3.5" aria-hidden="true" /> {label}
               </Link>

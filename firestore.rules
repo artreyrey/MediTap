@@ -11,7 +11,8 @@ service cloud.firestore {
         request.auth.token.admin == true ||
         (
           exists(/databases/$(database)/documents/staffs/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/staffs/$(request.auth.uid)).data.role == 'Administrator'
+          get(/databases/$(database)/documents/staffs/$(request.auth.uid)).data.role == 'Administrator' &&
+          get(/databases/$(database)/documents/staffs/$(request.auth.uid)).data.status == 'active'
         )
       );
     }
@@ -23,7 +24,8 @@ service cloud.firestore {
     }
 
     match /staffs/{staffId} {
-      allow read: if signedIn();
+      allow get: if signedIn() && (staffId == request.auth.uid || isAdministrator());
+      allow list: if isAdministrator();
       allow create: if isAdministrator() && request.resource.data.uid == staffId;
       allow update: if (isAdministrator() && request.resource.data.uid == resource.data.uid) ||
         (signedIn() && staffId == request.auth.uid &&
@@ -42,12 +44,14 @@ service cloud.firestore {
     }
 
     match /patients/{patientId} {
-      allow read, create, update: if isActiveStaff();
+      allow read: if isActiveStaff();
+      allow create, update: if isAdministrator();
       allow delete: if false;
     }
 
     match /counters/{counterId} {
-      allow read, create, update: if isActiveStaff();
+      allow read: if isActiveStaff();
+      allow create, update: if isAdministrator();
       allow delete: if false;
     }
 
