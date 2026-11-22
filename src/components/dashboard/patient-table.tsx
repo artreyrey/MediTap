@@ -68,7 +68,7 @@ export function PatientTable() {
       const uid = await rfidReader.scanCard();
       const existingPatient = await getDoc(doc(db, "patients", uid));
       if (existingPatient.exists()) {
-        setError("This RFID card is already registered to a patient.");
+        setError("Patient already exists. Use another RFID card.");
         setScanState("idle");
         return;
       }
@@ -99,7 +99,7 @@ export function PatientTable() {
         const patientRef = doc(db, "patients", rfidUID);
         const counterRef = doc(db, "counters", "patients");
         const [patientSnapshot, counterSnapshot] = await Promise.all([transaction.get(patientRef), transaction.get(counterRef)]);
-        if (patientSnapshot.exists()) throw new Error("This RFID card is already registered to a patient.");
+        if (patientSnapshot.exists()) throw new Error("Patient already exists. Use another RFID card.");
         const lastPatientNumber = typeof counterSnapshot.data()?.lastPatientNumber === "number" ? counterSnapshot.data()?.lastPatientNumber : 1;
         const patientNumber = lastPatientNumber + 1;
         transaction.set(counterRef, { lastPatientNumber: patientNumber, updatedAt: serverTimestamp() });
