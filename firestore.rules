@@ -46,7 +46,7 @@ service cloud.firestore {
     match /patients/{patientId} {
       allow read: if isActiveStaff();
       allow create, update: if isAdministrator();
-      allow delete: if false;
+      allow delete: if isAdministrator();
     }
 
     match /counters/{counterId} {
