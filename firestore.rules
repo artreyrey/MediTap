@@ -24,8 +24,8 @@ service cloud.firestore {
     }
 
     match /staffs/{staffId} {
-      allow get: if signedIn() && (staffId == request.auth.uid || isAdministrator());
-      allow list: if isAdministrator();
+      allow get: if signedIn() && (staffId == request.auth.uid || isAdministrator() || (isActiveStaff() && resource.data.status == 'active'));
+      allow list: if isAdministrator() || (isActiveStaff() && resource.data.status == 'active');
       allow create: if isAdministrator() && request.resource.data.uid == staffId;
       allow update: if (isAdministrator() && request.resource.data.uid == resource.data.uid) ||
         (signedIn() && staffId == request.auth.uid &&

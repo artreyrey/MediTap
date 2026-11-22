@@ -7,10 +7,12 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
+  query as firestoreQuery,
   serverTimestamp,
   setDoc,
   Timestamp,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, Pencil, Plus, Search, X } from "lucide-react";
 
@@ -126,6 +128,7 @@ export function StaffTable() {
   const [actionDeadline, setActionDeadline] = React.useState<number | null>(null);
   const [actionSeconds, setActionSeconds] = React.useState(0);
   const [accessDenied, setAccessDenied] = React.useState(false);
+  const [viewerReady, setViewerReady] = React.useState(false);
 
   React.useEffect(() => {
     if (!actionDeadline) return;
@@ -137,8 +140,28 @@ export function StaffTable() {
   }, [actionDeadline]);
 
   React.useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    return onSnapshot(doc(db, "staffs", uid), (snapshot) => {
+      const profile = snapshot.data();
+      if (profile?.status !== "active") setAccessDenied(true);
+      else setCanManage(profile.role === "Administrator");
+      setViewerReady(true);
+    }, () => {
+      setAccessDenied(true);
+      setViewerReady(true);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!viewerReady || accessDenied) return;
+
+    const staffQuery = canManage
+      ? collection(db, "staffs")
+      : firestoreQuery(collection(db, "staffs"), where("status", "==", "active"));
     const unsubscribe = onSnapshot(
-      collection(db, "staffs"),
+      staffQuery,
       (snapshot) => {
         const nextMembers = snapshot.docs.map((item) => {
           const data = item.data();
@@ -165,16 +188,12 @@ export function StaffTable() {
 
         nextMembers.sort((left, right) => (right.dateJoined?.toMillis() ?? 0) - (left.dateJoined?.toMillis() ?? 0));
         setMembers(nextMembers);
-        const currentUid = auth.currentUser?.uid;
-        setCanManage(Boolean(
-          (currentUid && nextMembers.some((member) => member.uid === currentUid && member.role === "Administrator")),
-        ));
         setLoading(false);
       },
       (snapshotError) => {
         if (snapshotError instanceof FirebaseError && snapshotError.code === "permission-denied") {
           setAccessDenied(true);
-          setMessage("Staff Information is available only to administrators.");
+          setMessage("Staff Information is available only to active staff.");
         } else {
           setMessage(getFirestoreMessage(snapshotError));
         }
@@ -184,7 +203,7 @@ export function StaffTable() {
     );
 
     return unsubscribe;
-  }, []);
+  }, [accessDenied, canManage, viewerReady]);
 
   function openAddModal() {
     setEditingId(null);
@@ -294,7 +313,7 @@ export function StaffTable() {
   }
 
   const filteredMembers = members.filter((member) => {
-    const matchesStatus = member.status === statusFilter;
+    const matchesStatus = member.status === (canManage ? statusFilter : "active");
     const normalizedQuery = query.trim().toLowerCase();
     const matchesQuery = !normalizedQuery || [member.fullName, member.username, member.email, member.role].some((value) => value.toLowerCase().includes(normalizedQuery));
     return matchesStatus && matchesQuery;
@@ -310,7 +329,7 @@ export function StaffTable() {
   });
 
   if (accessDenied) {
-    return <div className="rounded-2xl border border-border bg-card p-6 shadow-sm"><p className="text-sm font-medium text-primary">Access restricted</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Staff Information</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">Only administrators can view and manage staff accounts.</p></div>;
+    return <div className="rounded-2xl border border-border bg-card p-6 shadow-sm"><p className="text-sm font-medium text-primary">Access restricted</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Staff Information</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">Only active staff accounts can view the staff directory.</p></div>;
   }
 
   return (
@@ -319,7 +338,7 @@ export function StaffTable() {
         <div>
           <p className="text-sm font-medium text-primary">Access management</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Staff Information</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Manage administrator and operator profiles connected to Firebase.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{canManage ? "Manage administrator and operator profiles connected to Firebase." : "View active administrator and operator profiles."}</p>
         </div>
       </div>
 
@@ -336,10 +355,10 @@ export function StaffTable() {
             </span>
           </label>
           <div className="flex justify-start lg:justify-end">
-            <div className="flex items-center gap-1 rounded-lg border border-border p-1 text-xs" role="group" aria-label="Filter staff status">
+            {canManage ? <div className="flex items-center gap-1 rounded-lg border border-border p-1 text-xs" role="group" aria-label="Filter staff status">
               <button type="button" onClick={() => setStatusFilter("active")} className={`rounded-md px-3 py-2 transition-[color,background-color,transform] duration-200 ease-out active:scale-[0.97] ${statusFilter === "active" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}>Active</button>
               <button type="button" title="Show archived accounts" aria-label="Show archived accounts" onClick={() => setStatusFilter("archived")} className={`grid size-8 place-items-center rounded-md transition-[color,background-color,transform] duration-200 ease-out active:scale-[0.97] ${statusFilter === "archived" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground"}`}><Archive className="size-4" aria-hidden="true" /></button>
-            </div>
+            </div> : null}
           </div>
         </div>
 

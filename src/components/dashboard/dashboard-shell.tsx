@@ -40,7 +40,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = React.useState<User | null>(null);
   const [checkingAuth, setCheckingAuth] = React.useState(true);
-  const [isAdministrator, setIsAdministrator] = React.useState(false);
+  const [canViewStaff, setCanViewStaff] = React.useState(false);
   const [readerStatus, setReaderStatus] = React.useState<ReaderStatus>(rfidReader.getStatus());
   const [theme, setTheme] = React.useState<Theme>(() => (
     typeof window !== "undefined" && window.localStorage.getItem("meditap-theme") === "light" ? "light" : "dark"
@@ -57,7 +57,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (!currentUser || !currentUser.emailVerified) {
         setUser(null);
-        setIsAdministrator(false);
+        setCanViewStaff(false);
         setCheckingAuth(false);
         void signOut(auth).finally(() => router.replace("/login"));
         return;
@@ -75,8 +75,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
     void getDoc(doc(db, "staffs", user.uid)).then((snapshot) => {
       const profile = snapshot.data();
-      setIsAdministrator(profile?.role === "Administrator" && profile?.status === "active");
-    }).catch(() => setIsAdministrator(false));
+      setCanViewStaff(profile?.status === "active");
+    }).catch(() => setCanViewStaff(false));
   }, [user]);
 
   React.useEffect(() => {
@@ -104,7 +104,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const displayName = user.displayName || user.email?.split("@")[0] || "Staff";
   const initial = displayName.charAt(0).toUpperCase();
-  const visibleNavItems = navItems.filter((item) => item.href !== "/dashboard/staff" || isAdministrator);
+  const visibleNavItems = navItems.filter((item) => item.href !== "/dashboard/staff" || canViewStaff);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
