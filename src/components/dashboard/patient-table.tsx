@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Eye, Pencil, Plus, Printer, ScanLine, X } from "lucide-react";
+import { Eye, Pencil, Plus, Printer, ScanLine, Trash2, X } from "lucide-react";
 import { collection, doc, getDoc, onSnapshot, runTransaction, serverTimestamp, Timestamp as FirestoreTimestamp } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,23 @@ import { auth, db } from "@/lib/firebase";
 import { rfidReader, type ReaderStatus } from "@/lib/rfid-serial";
 
 type Patient = { id: string; patientId: string; name: string; number: string; address: string; dateJoined: FirestoreTimestamp | null };
-type PatientForm = { name: string; address: string; birthDate: string };
+type Condition = { id: string; text: string };
+type Allergy = { id: string; allergen: string; reaction: string };
+type Medication = { id: string; name: string; dosage: string; purpose: string };
+type PatientForm = {
+  name: string; birthDate: string; sex: string; number: string; email: string; address: string;
+  emergencyName: string; emergencyRelationship: string; emergencyNumber: string; emergencyEmail: string; emergencyAddress: string; sameEmergencyAddress: boolean;
+  noConditions: boolean; conditions: Condition[]; noAllergies: boolean; allergies: Allergy[]; noMedications: boolean; medications: Medication[];
+};
 
-const emptyForm: PatientForm = { name: "", address: "", birthDate: "" };
+const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const createEmptyForm = (): PatientForm => ({
+  name: "", birthDate: "", sex: "", number: "", email: "", address: "",
+  emergencyName: "", emergencyRelationship: "", emergencyNumber: "", emergencyEmail: "", emergencyAddress: "", sameEmergencyAddress: false,
+  noConditions: false, conditions: [{ id: "condition-0", text: "" }],
+  noAllergies: false, allergies: [{ id: "allergy-0", allergen: "", reaction: "" }],
+  noMedications: false, medications: [{ id: "medication-0", name: "", dosage: "", purpose: "" }],
+});
 
 function formatDate(value: FirestoreTimestamp | null) {
   return value ? value.toDate().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—";
@@ -26,6 +40,22 @@ function readerLabel(status: ReaderStatus) {
   return "RFID reader not connected";
 }
 
+function calculateAge(birthDate: string) {
+  if (!birthDate) return "";
+  const today = new Date();
+  const date = new Date(`${birthDate}T00:00:00`);
+  let age = today.getFullYear() - date.getFullYear();
+  if (today < new Date(today.getFullYear(), date.getMonth(), date.getDate())) age -= 1;
+  return String(Math.max(0, age));
+}
+
+function Section({ number, title, coral = false, children }: { number: number; title: string; coral?: boolean; children: React.ReactNode }) {
+  return <section className="overflow-hidden rounded-xl border border-border bg-card">
+    <div className={`border-t-4 px-5 py-3 ${coral ? "border-secondary" : "border-primary"} bg-background`}><h3 className="font-semibold">{number}. {title}</h3></div>
+    <div className="space-y-5 p-5">{children}</div>
+  </section>;
+}
+
 export function PatientTable() {
   const [patients, setPatients] = React.useState<Patient[]>([]);
   const [query, setQuery] = React.useState("");
@@ -34,7 +64,7 @@ export function PatientTable() {
   const [scanState, setScanState] = React.useState<"idle" | "waiting" | "form">("idle");
   const [readerStatus, setReaderStatus] = React.useState<ReaderStatus>(rfidReader.getStatus());
   const [rfidUID, setRfidUID] = React.useState("");
-  const [form, setForm] = React.useState<PatientForm>(emptyForm);
+  const [form, setForm] = React.useState<PatientForm>(createEmptyForm);
   const [saving, setSaving] = React.useState(false);
   const [canManage, setCanManage] = React.useState(false);
 
@@ -54,8 +84,8 @@ export function PatientTable() {
         return {
           id: item.id,
           patientId: typeof data.patientId === "string" ? data.patientId : item.id,
-          name: typeof data.name === "string" ? data.name : typeof data.fullName === "string" ? data.fullName : "Unnamed patient",
-          number: typeof data.number === "string" ? data.number : typeof data.phone === "string" ? data.phone : "—",
+          name: typeof data.name === "string" ? data.name : "Unnamed patient",
+          number: typeof data.number === "string" ? data.number : "—",
           address: typeof data.address === "string" ? data.address : "—",
           dateJoined: data.dateJoined instanceof FirestoreTimestamp ? data.dateJoined : null,
         } satisfies Patient;
@@ -83,7 +113,7 @@ export function PatientTable() {
         return;
       }
       setRfidUID(uid);
-      setForm(emptyForm);
+      setForm(createEmptyForm());
       setScanState("form");
     } catch (scanError) {
       const message = scanError instanceof Error ? scanError.message : "Could not start the RFID scan. Please try again.";
@@ -95,27 +125,41 @@ export function PatientTable() {
   async function closeAddPatient() {
     setScanState("idle");
     setRfidUID("");
-    setForm(emptyForm);
+    setForm(createEmptyForm());
     await rfidReader.cancelScan();
   }
 
   async function savePatient(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!rfidUID || !form.name.trim() || !form.address.trim() || !form.birthDate) return;
+    if (!rfidUID || !form.name.trim() || !form.birthDate || !form.sex || !form.number.trim() || !form.email.trim() || !form.address.trim() || !form.emergencyName.trim() || !form.emergencyRelationship || !form.emergencyNumber.trim()) {
+      setError("Complete all required patient and emergency-contact fields.");
+      return;
+    }
+
     setSaving(true);
     setError("");
     try {
+      const conditions = form.noConditions ? [] : form.conditions.filter((item) => item.text.trim()).map((item) => item.text.trim());
+      const allergies = form.noAllergies ? [] : form.allergies.filter((item) => item.allergen.trim() || item.reaction.trim()).map(({ allergen, reaction }) => ({ allergen: allergen.trim(), reaction: reaction.trim() }));
+      const medications = form.noMedications ? [] : form.medications.filter((item) => item.name.trim() || item.dosage.trim() || item.purpose.trim()).map(({ name, dosage, purpose }) => ({ name: name.trim(), dosage: dosage.trim(), purpose: purpose.trim() }));
+      const age = calculateAge(form.birthDate);
+
       await runTransaction(db, async (transaction) => {
         const patientRef = doc(db, "patients", rfidUID);
         const counterRef = doc(db, "counters", "patients");
         const [patientSnapshot, counterSnapshot] = await Promise.all([transaction.get(patientRef), transaction.get(counterRef)]);
         if (patientSnapshot.exists()) throw new Error("Patient already exists. Use another RFID card.");
+
         const lastPatientNumber = typeof counterSnapshot.data()?.lastPatientNumber === "number" ? counterSnapshot.data()?.lastPatientNumber : 1;
         const patientNumber = lastPatientNumber + 1;
         transaction.set(counterRef, { lastPatientNumber: patientNumber, updatedAt: serverTimestamp() });
         transaction.set(patientRef, {
-          patientId: String(patientNumber).padStart(3, "0"), name: form.name.trim(), address: form.address.trim(),
-          birthDate: FirestoreTimestamp.fromDate(new Date(`${form.birthDate}T00:00:00.000Z`)), rfidUID,
+          patientId: String(patientNumber).padStart(3, "0"), rfidUID, name: form.name.trim(), birthDate: FirestoreTimestamp.fromDate(new Date(`${form.birthDate}T00:00:00.000Z`)),
+          age: Number(age), sex: form.sex, number: form.number.trim(), email: form.email.trim().toLowerCase(), address: form.address.trim(),
+          emergencyContact: { name: form.emergencyName.trim(), relationship: form.emergencyRelationship, number: form.emergencyNumber.trim(), email: form.emergencyEmail.trim().toLowerCase(), address: form.sameEmergencyAddress ? form.address.trim() : form.emergencyAddress.trim(), sameAsPatientAddress: form.sameEmergencyAddress },
+          conditions: { none: form.noConditions || conditions.length === 0, items: conditions },
+          allergies: { none: form.noAllergies || allergies.length === 0, items: allergies },
+          medications: { none: form.noMedications || medications.length === 0, items: medications },
           dateJoined: serverTimestamp(), createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: auth.currentUser?.uid ?? null,
         });
       });
@@ -132,25 +176,32 @@ export function PatientTable() {
     return !search || [patient.patientId, patient.name, patient.number, patient.address].some((value) => value.toLowerCase().includes(search));
   });
   const readerReady = readerStatus === "connected" || readerStatus === "scanning";
+  const inputClass = "border-0 border-b border-border bg-transparent px-0 shadow-none focus-visible:ring-0";
 
   return <div className="space-y-5">
     <div><p className="text-sm font-medium text-primary">Records workspace</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Patient Information</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">View patient records connected to Firestore.</p></div>
     <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
       <div className="grid gap-3 border-b border-border pb-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
         <div className="flex justify-start">{canManage ? <Button size="sm" className="rounded-lg" onClick={() => void startScan()}><Plus className="size-4" aria-hidden="true" /> Add Patient</Button> : null}</div>
-        <label className="relative w-full max-w-sm"><ScanLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Scan to search" className="bg-background pl-9" aria-label="Scan to search patients" /></label>
+        <label className="relative w-full max-w-sm"><ScanLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Scan to search" className="bg-background pl-9" aria-label="Search patients" /></label>
       </div>
-      {error ? <p role="alert" className="mb-4 mt-4 text-sm text-rose-300">{error}</p> : null}
+      {error ? <p role="alert" className="mb-4 mt-4 text-sm text-secondary">{error}</p> : null}
       <div className="overflow-x-auto rounded-xl border border-border"><table className="w-full min-w-[900px] text-left text-sm">
-        <thead className="bg-background text-xs font-semibold uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3 font-semibold">Patient ID</th><th className="px-4 py-3 font-semibold">Name</th><th className="px-4 py-3 font-semibold">Number</th><th className="px-4 py-3 font-semibold">Address</th><th className="px-4 py-3 font-semibold">Date Joined</th><th className="px-4 py-3 text-right font-semibold">Actions</th></tr></thead>
-        <tbody className="divide-y divide-border">
-          {loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Loading patients…</td></tr> : filteredPatients.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No patient records found.</td></tr> : filteredPatients.map((patient) => <tr key={patient.id} className="transition-colors duration-200 hover:bg-accent/40"><td className="px-4 py-4 font-medium">{patient.patientId}</td><td className="px-4 py-4 font-medium">{patient.name}</td><td className="px-4 py-4 text-muted-foreground">{patient.number}</td><td className="px-4 py-4 text-muted-foreground">{patient.address}</td><td className="px-4 py-4 text-muted-foreground">{formatDate(patient.dateJoined)}</td><td className="px-4 py-4"><div className="flex justify-end gap-1"><button type="button" disabled title="Show patient information — coming soon" aria-label={`Show information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Eye className="size-4" aria-hidden="true" /></button>{canManage ? <button type="button" disabled title="Edit patient information — coming soon" aria-label={`Edit information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Pencil className="size-4" aria-hidden="true" /></button> : null}<button type="button" disabled title="Print patient information — coming soon" aria-label={`Print information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Printer className="size-4" aria-hidden="true" /></button></div></td></tr>)}
-        </tbody>
+        <thead className="bg-background text-xs font-semibold uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Patient ID</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Number</th><th className="px-4 py-3">Address</th><th className="px-4 py-3">Date Joined</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+        <tbody className="divide-y divide-border">{loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Loading patients…</td></tr> : filteredPatients.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No patient records found.</td></tr> : filteredPatients.map((patient) => <tr key={patient.id} className="transition-colors duration-200 hover:bg-accent/40"><td className="px-4 py-4 font-medium">{patient.patientId}</td><td className="px-4 py-4 font-medium">{patient.name}</td><td className="px-4 py-4 text-muted-foreground">{patient.number}</td><td className="px-4 py-4 text-muted-foreground">{patient.address}</td><td className="px-4 py-4 text-muted-foreground">{formatDate(patient.dateJoined)}</td><td className="px-4 py-4"><div className="flex justify-end gap-1"><button type="button" disabled title="Show patient information — coming soon" aria-label={`Show information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Eye className="size-4" aria-hidden="true" /></button>{canManage ? <button type="button" disabled title="Edit patient information — coming soon" aria-label={`Edit information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Pencil className="size-4" aria-hidden="true" /></button> : null}<button type="button" disabled title="Print patient information — coming soon" aria-label={`Print information for ${patient.name}`} className="grid size-9 cursor-not-allowed place-items-center rounded-md text-muted-foreground opacity-60"><Printer className="size-4" aria-hidden="true" /></button></div></td></tr>)}</tbody>
       </table></div>
     </section>
-    {scanState !== "idle" ? <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="patient-modal-title" className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl">
-      <div className="flex items-start justify-between gap-4"><div><h2 id="patient-modal-title" className="text-xl font-semibold">{scanState === "waiting" ? "Tap RFID card" : "Add Patient"}</h2><p className="mt-1 text-sm text-muted-foreground">{scanState === "waiting" ? "Hold an unregistered RFID card near the reader." : "Complete the patient details for the scanned card."}</p></div><button type="button" onClick={() => void closeAddPatient()} className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close Add Patient"><X className="size-4" aria-hidden="true" /></button></div>
-      {scanState === "waiting" ? <div className="mt-6 rounded-xl border border-border bg-background p-5 text-center"><ScanLine className="mx-auto size-8 text-primary" aria-hidden="true" /><div className="mt-3 flex items-center justify-center gap-2 text-sm font-medium"><span className={`size-2.5 rounded-full ${readerReady ? "bg-emerald-500" : readerStatus === "connecting" ? "bg-amber-400" : "bg-rose-500"}`} aria-hidden="true" /><span>{readerLabel(readerStatus)}</span></div><p className="mt-1 text-xs text-muted-foreground">{readerStatus === "scanning" ? "Hold an unregistered RFID card near the reader." : readerStatus === "connecting" ? "Choose the ESP32 in the browser prompt." : "Connect the ESP32 by USB, then try again."}</p><p className="mt-3 text-xs text-muted-foreground">Cancel if you do not want to scan a card.</p></div> : <form className="mt-6 space-y-4" onSubmit={savePatient}><label className="block space-y-2 text-sm font-medium">RFID UID<Input value={rfidUID} readOnly className="bg-background" /></label><label className="block space-y-2 text-sm font-medium">Name<Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Lastname, Firstname MI." required className="bg-background" /></label><label className="block space-y-2 text-sm font-medium">Address<Input value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="Barangay, City" required className="bg-background" /></label><label className="block space-y-2 text-sm font-medium">Birthdate<Input type="date" value={form.birthDate} onChange={(event) => setForm((current) => ({ ...current, birthDate: event.target.value }))} required className="bg-background" /></label><div className="flex justify-end gap-2 border-t border-border pt-4"><Button type="button" variant="ghost" onClick={() => void closeAddPatient()}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save Patient"}</Button></div></form>}
+    {scanState !== "idle" ? <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="patient-modal-title" className={`w-full ${scanState === "form" ? "max-w-4xl" : "max-w-lg"} max-h-[92vh] overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl`}>
+      <div className="flex items-start justify-between gap-4"><div><h2 id="patient-modal-title" className="text-xl font-semibold">{scanState === "waiting" ? "Tap RFID card" : "Patient Information Form"}</h2><p className="mt-1 text-sm text-muted-foreground">{scanState === "waiting" ? "Hold an unregistered RFID card near the reader." : "Complete the new patient record."}</p></div><button type="button" onClick={() => void closeAddPatient()} className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Close Add Patient"><X className="size-4" aria-hidden="true" /></button></div>
+      {scanState === "waiting" ? <div className="mt-6 rounded-xl border border-border bg-background p-5 text-center"><ScanLine className="mx-auto size-8 text-primary" aria-hidden="true" /><div className="mt-3 flex items-center justify-center gap-2 text-sm font-medium"><span className={`size-2.5 rounded-full ${readerReady ? "bg-emerald-500" : readerStatus === "connecting" ? "bg-amber-400" : "bg-secondary"}`} aria-hidden="true" /><span>{readerLabel(readerStatus)}</span></div><p className="mt-1 text-xs text-muted-foreground">{readerStatus === "scanning" ? "Hold an unregistered RFID card near the reader." : readerStatus === "connecting" ? "Choose the ESP32 in the browser prompt." : "Connect the ESP32 by USB, then try again."}</p></div> : <form className="mt-6 space-y-5" onSubmit={savePatient}>
+        <div className="rounded-xl border border-border bg-background px-4 py-3 text-sm"><span className="font-semibold">RFID UID:</span> {rfidUID}</div>
+        <Section number={1} title="Patient Information"><div className="grid gap-5 sm:grid-cols-2"><label className="space-y-2 text-sm font-medium sm:col-span-2">Full Name <span className="text-secondary">*</span><Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Last Name, First Name, Middle Name" required className={inputClass} /></label><label className="space-y-2 text-sm font-medium">Birthdate <span className="text-secondary">*</span><Input type="date" value={form.birthDate} onChange={(event) => setForm((current) => ({ ...current, birthDate: event.target.value }))} required className={inputClass} /></label><label className="space-y-2 text-sm font-medium">Age<Input value={calculateAge(form.birthDate)} readOnly placeholder="Years" className={inputClass} /></label><fieldset className="space-y-2 text-sm font-medium"><legend>Biological Sex <span className="text-secondary">*</span></legend><div className="flex flex-wrap gap-4 text-sm font-normal">{["Male", "Female", "Intersex"].map((sex) => <label key={sex} className="flex items-center gap-2"><input type="radio" name="sex" value={sex} checked={form.sex === sex} onChange={(event) => setForm((current) => ({ ...current, sex: event.target.value }))} required className="accent-primary" />{sex}</label>)}</div></fieldset><label className="space-y-2 text-sm font-medium">Contact Number <span className="text-secondary">*</span><Input type="tel" value={form.number} onChange={(event) => setForm((current) => ({ ...current, number: event.target.value }))} placeholder="+63 9XX XXX XXXX" required className={inputClass} /></label><label className="space-y-2 text-sm font-medium">Email Address <span className="text-secondary">*</span><Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="patient@example.com" required className={inputClass} /></label><label className="space-y-2 text-sm font-medium sm:col-span-2">Residential Address <span className="text-secondary">*</span><Input value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value, emergencyAddress: current.sameEmergencyAddress ? event.target.value : current.emergencyAddress }))} placeholder="House/Unit No., Street, Barangay, City/Municipality" required className={inputClass} /></label></div></Section>
+        <Section number={2} title="Emergency Contact"><div className="grid gap-5 sm:grid-cols-2"><label className="space-y-2 text-sm font-medium sm:col-span-2">Full Name <span className="text-secondary">*</span><Input value={form.emergencyName} onChange={(event) => setForm((current) => ({ ...current, emergencyName: event.target.value }))} placeholder="Full name of emergency contact" required className={inputClass} /></label><label className="space-y-2 text-sm font-medium">Relationship <span className="text-secondary">*</span><select value={form.emergencyRelationship} onChange={(event) => setForm((current) => ({ ...current, emergencyRelationship: event.target.value }))} required className="h-11 w-full border-0 border-b border-border bg-transparent px-0 text-sm outline-none focus:border-primary"><option value="">Select relationship</option>{["Parent", "Spouse", "Sibling", "Child", "Other"].map((relationship) => <option key={relationship}>{relationship}</option>)}</select></label><label className="space-y-2 text-sm font-medium">Phone Number <span className="text-secondary">*</span><Input type="tel" value={form.emergencyNumber} onChange={(event) => setForm((current) => ({ ...current, emergencyNumber: event.target.value }))} placeholder="+63 9XX XXX XXXX" required className={inputClass} /></label><label className="space-y-2 text-sm font-medium">Email Address (optional)<Input type="email" value={form.emergencyEmail} onChange={(event) => setForm((current) => ({ ...current, emergencyEmail: event.target.value }))} placeholder="contact@example.com" className={inputClass} /></label><label className="flex items-end gap-2 text-sm"><input type="checkbox" checked={form.sameEmergencyAddress} onChange={(event) => setForm((current) => ({ ...current, sameEmergencyAddress: event.target.checked, emergencyAddress: event.target.checked ? current.address : current.emergencyAddress }))} className="accent-primary" />Same as patient address</label><label className="space-y-2 text-sm font-medium sm:col-span-2">Address (optional)<Input value={form.emergencyAddress} disabled={form.sameEmergencyAddress} onChange={(event) => setForm((current) => ({ ...current, emergencyAddress: event.target.value }))} placeholder="Residential address of emergency contact" className={inputClass} /></label></div></Section>
+        <Section number={3} title="Existing or Ongoing Conditions"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.noConditions} onChange={(event) => setForm((current) => ({ ...current, noConditions: event.target.checked }))} className="accent-primary" />None — Patient has no known ongoing medical conditions</label>{!form.noConditions ? <div className="space-y-3">{form.conditions.map((item, index) => <div key={item.id} className="flex gap-2"><Input value={item.text} onChange={(event) => setForm((current) => ({ ...current, conditions: current.conditions.map((condition) => condition.id === item.id ? { ...condition, text: event.target.value } : condition) }))} placeholder="e.g., Hypertension, Type 2 Diabetes, Bronchial Asthma" className={inputClass} /><button type="button" onClick={() => setForm((current) => ({ ...current, conditions: current.conditions.length === 1 ? current.conditions : current.conditions.filter((condition) => condition.id !== item.id) }))} disabled={form.conditions.length === 1} className="text-muted-foreground disabled:opacity-30" aria-label={`Remove condition ${index + 1}`}><Trash2 className="size-4" /></button></div>)}<Button type="button" variant="ghost" size="sm" onClick={() => setForm((current) => ({ ...current, conditions: [...current.conditions, { id: makeId(), text: "" }] }))}><Plus className="size-4" /> Add another condition</Button></div> : null}</Section>
+        <Section number={4} title="Known Allergies & Reactions" coral><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.noAllergies} onChange={(event) => setForm((current) => ({ ...current, noAllergies: event.target.checked }))} className="accent-primary" />No Known Allergies (NKA)</label>{!form.noAllergies ? <div className="space-y-3">{form.allergies.map((item, index) => <div key={item.id} className="flex gap-2"><div className="grid flex-1 gap-3 sm:grid-cols-2"><Input value={item.allergen} onChange={(event) => setForm((current) => ({ ...current, allergies: current.allergies.map((allergy) => allergy.id === item.id ? { ...allergy, allergen: event.target.value } : allergy) }))} placeholder="Allergen (Drug, Food, Environmental)" className={inputClass} /><Input value={item.reaction} onChange={(event) => setForm((current) => ({ ...current, allergies: current.allergies.map((allergy) => allergy.id === item.id ? { ...allergy, reaction: event.target.value } : allergy) }))} placeholder="Reaction / Severity" className={inputClass} /></div><button type="button" onClick={() => setForm((current) => ({ ...current, allergies: current.allergies.length === 1 ? current.allergies : current.allergies.filter((allergy) => allergy.id !== item.id) }))} disabled={form.allergies.length === 1} className="text-muted-foreground disabled:opacity-30" aria-label={`Remove allergy ${index + 1}`}><Trash2 className="size-4" /></button></div>)}<Button type="button" variant="ghost" size="sm" onClick={() => setForm((current) => ({ ...current, allergies: [...current.allergies, { id: makeId(), allergen: "", reaction: "" }] }))}><Plus className="size-4" /> Add another allergy</Button></div> : null}</Section>
+        <Section number={5} title="Current Medications"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.noMedications} onChange={(event) => setForm((current) => ({ ...current, noMedications: event.target.checked }))} className="accent-primary" />None — Not currently taking maintenance medications</label>{!form.noMedications ? <div className="space-y-3">{form.medications.map((item, index) => <div key={item.id} className="flex gap-2"><div className="grid flex-1 gap-3 sm:grid-cols-3"><Input value={item.name} onChange={(event) => setForm((current) => ({ ...current, medications: current.medications.map((medication) => medication.id === item.id ? { ...medication, name: event.target.value } : medication) }))} placeholder="Medication Name" className={inputClass} /><Input value={item.dosage} onChange={(event) => setForm((current) => ({ ...current, medications: current.medications.map((medication) => medication.id === item.id ? { ...medication, dosage: event.target.value } : medication) }))} placeholder="Dosage & Frequency" className={inputClass} /><Input value={item.purpose} onChange={(event) => setForm((current) => ({ ...current, medications: current.medications.map((medication) => medication.id === item.id ? { ...medication, purpose: event.target.value } : medication) }))} placeholder="Purpose / Indication" className={inputClass} /></div><button type="button" onClick={() => setForm((current) => ({ ...current, medications: current.medications.length === 1 ? current.medications : current.medications.filter((medication) => medication.id !== item.id) }))} disabled={form.medications.length === 1} className="text-muted-foreground disabled:opacity-30" aria-label={`Remove medication ${index + 1}`}><Trash2 className="size-4" /></button></div>)}<Button type="button" variant="ghost" size="sm" onClick={() => setForm((current) => ({ ...current, medications: [...current.medications, { id: makeId(), name: "", dosage: "", purpose: "" }] }))}><Plus className="size-4" /> Add another medication</Button></div> : null}</Section>
+        <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => void closeAddPatient()}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save Patient Record"}</Button></div>
+      </form>}
     </section></div> : null}
   </div>;
 }
