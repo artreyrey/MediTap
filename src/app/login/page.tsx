@@ -15,7 +15,7 @@ export default function LoginPage() {
       id="main-content"
       className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#001019] px-5 py-12 text-brand-100 sm:px-8"
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(123,189,232,0.16),transparent_30%),radial-gradient(circle_at_15%_85%,rgba(73,118,159,0.16),transparent_32%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(18,184,176,0.18),transparent_30%),radial-gradient(circle_at_15%_85%,rgba(217,127,108,0.14),transparent_32%)]" />
 
       <div className="relative w-full max-w-lg">
         <Link

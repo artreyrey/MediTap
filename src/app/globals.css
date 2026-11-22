@@ -26,44 +26,44 @@
 }
 
 :root {
-  --background: #f7fbfe;
-  --foreground: #001d39;
-  --card: #ffffff;
-  --card-foreground: #001d39;
-  --primary: #0a4174;
-  --primary-foreground: #ffffff;
-  --secondary: #bdd8e9;
-  --secondary-foreground: #001d39;
-  --muted: #edf5fa;
-  --muted-foreground: #49769f;
-  --accent: #e5f2fa;
-  --accent-foreground: #0a4174;
-  --border: #d3e4ef;
-  --ring: #7bbde8;
-  --brand-950: #001d39;
-  --brand-700: #0a4174;
-  --brand-600: #49769f;
-  --brand-500: #4e8ea2;
-  --brand-400: #6ea2b3;
-  --brand-300: #7bbde8;
-  --brand-100: #bdd8e9;
+  --background: #f3ede6;
+  --foreground: #195a5f;
+  --card: #fffdfa;
+  --card-foreground: #195a5f;
+  --primary: #12b8b0;
+  --primary-foreground: #195a5f;
+  --secondary: #d97f6c;
+  --secondary-foreground: #fffdfa;
+  --muted: #f3ede6;
+  --muted-foreground: #4f7779;
+  --accent: #d8f3ef;
+  --accent-foreground: #195a5f;
+  --border: #ded4ca;
+  --ring: #12b8b0;
+  --brand-950: #195a5f;
+  --brand-700: #195a5f;
+  --brand-600: #28787a;
+  --brand-500: #12b8b0;
+  --brand-400: #55cdc7;
+  --brand-300: #93e1dc;
+  --brand-100: #f3ede6;
 }
 
 .dark {
-  --background: #0c0c0c;
-  --foreground: #f4f4f5;
-  --card: #171717;
-  --card-foreground: #f4f4f5;
-  --primary: #7bbde8;
-  --primary-foreground: #001d39;
-  --secondary: #242424;
-  --secondary-foreground: #f4f4f5;
-  --muted: #1c1c1c;
-  --muted-foreground: #a1a1aa;
-  --accent: #262626;
-  --accent-foreground: #f4f4f5;
-  --border: #303030;
-  --ring: #7bbde8;
+  --background: #102f32;
+  --foreground: #f3ede6;
+  --card: #195a5f;
+  --card-foreground: #f3ede6;
+  --primary: #12b8b0;
+  --primary-foreground: #195a5f;
+  --secondary: #d97f6c;
+  --secondary-foreground: #fffdfa;
+  --muted: #164246;
+  --muted-foreground: #b8d2cf;
+  --accent: #246c70;
+  --accent-foreground: #f3ede6;
+  --border: #34767a;
+  --ring: #55cdc7;
 }
 
 * {
@@ -78,7 +78,7 @@ html {
 a,
 button {
   touch-action: manipulation;
-  -webkit-tap-highlight-color: rgba(123, 189, 232, 0.22);
+  -webkit-tap-highlight-color: rgba(18, 184, 176, 0.22);
 }
 
 body {
@@ -91,14 +91,14 @@ body {
 }
 
 ::selection {
-  background: rgba(12, 95, 103, 0.18);
+  background: rgba(18, 184, 176, 0.22);
 }
 
 .hero-grid {
-  background-color: #f7fbfe;
+  background-color: #f3ede6;
   background-image:
-    linear-gradient(rgba(10, 65, 116, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(10, 65, 116, 0.045) 1px, transparent 1px);
+    linear-gradient(rgba(25, 90, 95, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(25, 90, 95, 0.06) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: linear-gradient(to bottom, black 78%, transparent 100%);
 }

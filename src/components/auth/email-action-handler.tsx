@@ -87,7 +87,7 @@ export function EmailActionHandler() {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#001019] px-5 py-12 text-brand-100 sm:px-8">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(123,189,232,0.16),transparent_30%),radial-gradient(circle_at_15%_85%,rgba(73,118,159,0.16),transparent_32%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(18,184,176,0.18),transparent_30%),radial-gradient(circle_at_15%_85%,rgba(217,127,108,0.14),transparent_32%)]" />
       <section className="relative w-full max-w-md rounded-[24px] border border-brand-600/45 bg-brand-950/95 p-6 shadow-[0_30px_90px_-42px_rgba(0,0,0,0.8)] backdrop-blur sm:p-8" aria-live="polite">
         <p className="text-sm font-medium text-brand-300">MediTap</p>
 

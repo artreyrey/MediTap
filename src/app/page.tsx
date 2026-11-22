@@ -125,7 +125,7 @@ export default function Home() {
 
       <main id="main-content" className="overflow-hidden">
       <section id="top" className="hero-grid relative min-h-[760px] scroll-mt-24 pt-36 sm:pt-40 lg:flex lg:min-h-[820px] lg:items-center lg:pt-24">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_35%,rgba(123,189,232,0.24),transparent_28%),radial-gradient(circle_at_18%_12%,rgba(73,118,159,0.10),transparent_24%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_35%,rgba(18,184,176,0.24),transparent_28%),radial-gradient(circle_at_18%_12%,rgba(217,127,108,0.12),transparent_24%)]" />
         <div className="relative mx-auto grid w-full max-w-7xl items-center gap-20 px-5 pb-24 sm:px-8 lg:grid-cols-[0.92fr_1.08fr] lg:gap-12 lg:px-10 lg:pb-12">
           <div className="hero-enter max-w-2xl">
             <Badge className="mb-6"><Sparkles className="size-3" aria-hidden="true" /> RFID-powered patient records</Badge>
@@ -169,7 +169,7 @@ export default function Home() {
 
           <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {capabilities.map(({ icon: Icon, title, description, color }) => (
-              <article key={title} className="rounded-[26px] border border-brand-100/65 bg-white p-6 shadow-[0_18px_55px_-45px_rgba(10,65,116,0.30)] sm:p-7">
+              <article key={title} className="rounded-[26px] border border-brand-100/65 bg-white p-6 shadow-[0_18px_55px_-45px_rgba(25,90,95,0.30)] sm:p-7">
                 <span className={`grid size-11 place-items-center rounded-2xl ${color}`}><Icon className="size-5" aria-hidden="true" /></span>
                 <h3 className="mt-6 text-xl font-bold tracking-[-0.025em] text-slate-900">{title}</h3>
                 <p className="mt-3 leading-7 text-muted-foreground">{description}</p>
@@ -190,7 +190,7 @@ export default function Home() {
           <div className="relative mt-16 grid gap-5 md:grid-cols-4">
             <div className="absolute left-[12.5%] right-[12.5%] top-8 hidden border-t border-dashed border-primary/25 md:block" />
             {workflow.map(({ step, icon: Icon, title, description }) => (
-              <article key={step} className="relative rounded-[24px] border border-brand-100/70 bg-white p-6 shadow-[0_16px_45px_-36px_rgba(10,65,116,0.36)]">
+              <article key={step} className="relative rounded-[24px] border border-brand-100/70 bg-white p-6 shadow-[0_16px_45px_-36px_rgba(25,90,95,0.36)]">
                 <div className="flex items-center justify-between">
                   <span className="relative z-10 grid size-16 place-items-center rounded-2xl border border-primary/10 bg-primary/7 text-primary"><Icon className="size-6" aria-hidden="true" /></span>
                   <span className="text-xs font-bold tracking-[0.18em] text-slate-300">{step}</span>
