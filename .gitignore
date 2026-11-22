@@ -25,7 +25,7 @@ graphify-out/
 *.log
 
 # Arduino reader credentials
-hardware/meditap/secrets.h
+hardware/**/secrets.h
 
 # typescript
 *.tsbuildinfo

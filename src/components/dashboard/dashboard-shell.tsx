@@ -9,18 +9,16 @@ import {
   Search,
   ScanLine,
   Sun,
-  CheckCircle2,
-  CircleAlert,
-  X,
+  Usb,
   IdCard,
   CircleUserRound,
   UsersRound,
 } from "lucide-react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
 
 import { BrandLogo } from "@/components/brand-logo";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
+import { rfidReader, type ReaderStatus } from "@/lib/rfid-serial";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -41,7 +39,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [user, setUser] = React.useState<User | null>(null);
   const [checkingAuth, setCheckingAuth] = React.useState(true);
-  const [readerToast, setReaderToast] = React.useState<"connecting" | "connected" | "failed" | null>("connecting");
+  const [readerStatus, setReaderStatus] = React.useState<ReaderStatus>(rfidReader.getStatus());
   const [theme, setTheme] = React.useState<Theme>(() => (
     typeof window !== "undefined" && window.localStorage.getItem("meditap-theme") === "light" ? "light" : "dark"
   ));
@@ -70,31 +68,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   React.useEffect(() => {
-    if (!user) return;
-
-    let confirmed = false;
-    const timeout = window.setTimeout(() => {
-      if (!confirmed) setReaderToast("failed");
-    }, 20000);
-    const unsubscribe = onSnapshot(doc(db, "readerStatus", "current"), (snapshot) => {
-      if (snapshot.data()?.state !== "connected") return;
-      confirmed = true;
-      window.clearTimeout(timeout);
-      setReaderToast("connected");
-    }, () => {
-      window.clearTimeout(timeout);
-      setReaderToast("failed");
-    });
-
-    return () => {
-      window.clearTimeout(timeout);
-      unsubscribe();
-    };
-  }, [user]);
+    const unsubscribe = rfidReader.subscribe(setReaderStatus);
+    void rfidReader.reconnectAuthorized().catch(() => undefined);
+    return unsubscribe;
+  }, []);
 
   async function handleSignOut() {
     await signOut(auth);
     router.replace("/login");
+  }
+
+  async function handleReaderConnect() {
+    await rfidReader.connect().catch(() => undefined);
   }
 
   if (checkingAuth || !user) {
@@ -163,7 +148,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="lg:pl-64">
-        {readerToast ? <div role="status" className={`fixed right-4 top-4 z-[60] flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl border p-4 shadow-lg ${readerToast === "connected" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : readerToast === "failed" ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}><span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${readerToast === "connected" ? "bg-emerald-500 text-white" : readerToast === "failed" ? "bg-rose-500 text-white" : "bg-amber-500 text-white"}`}>{readerToast === "connected" ? <CheckCircle2 className="size-4" aria-hidden="true" /> : readerToast === "failed" ? <CircleAlert className="size-4" aria-hidden="true" /> : <ScanLine className="size-4" aria-hidden="true" />}</span><div className="min-w-0 flex-1"><p className="text-sm font-semibold">{readerToast === "connected" ? "Firebase authentication finished" : readerToast === "failed" ? "Firebase authentication not confirmed" : "Connecting to Firebase"}</p><p className="mt-1 text-xs leading-5">{readerToast === "connected" ? "ESP32 is ready for MediTap RFID requests." : readerToast === "failed" ? "The ESP32 is retrying its Firebase connection." : "Waiting for ESP32 Firebase connection…"}</p></div><button type="button" onClick={() => setReaderToast(null)} className="grid size-7 shrink-0 place-items-center rounded-md transition-colors hover:bg-black/10 dark:hover:bg-white/10" aria-label="Dismiss Firebase status notification"><X className="size-4" aria-hidden="true" /></button></div> : null}
         <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur-xl">
           <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
             <Link href="/dashboard" className="lg:hidden" aria-label="MediTap dashboard">
@@ -178,6 +162,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <kbd className="rounded border border-border px-1.5 py-0.5 text-[10px]">⌘ K</kbd>
             </button>
             <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                className={`flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${readerStatus === "connected" || readerStatus === "scanning" ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-border bg-card hover:bg-accent"}`}
+                onClick={() => void handleReaderConnect()}
+                disabled={readerStatus === "connecting" || readerStatus === "scanning"}
+              >
+                <Usb className="size-4" aria-hidden="true" />
+                <span className="hidden sm:inline">{readerStatus === "connected" || readerStatus === "scanning" ? "RFID Connected" : readerStatus === "connecting" ? "Connecting…" : "Connect RFID"}</span>
+              </button>
               <button
                 type="button"
                 className="grid size-10 place-items-center rounded-lg border border-border bg-card transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
