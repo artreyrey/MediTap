@@ -1,44 +1,210 @@
 "use client";
 
 import * as React from "react";
-import { Archive, ArchiveRestore, Eye, Pencil, Plus, Printer, ScanLine, Trash2, X } from "lucide-react";
-import { collection, deleteDoc, doc, getDoc, onSnapshot, runTransaction, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
+import {
+  Archive,
+  ArchiveRestore,
+  Eye,
+  Pencil,
+  Plus,
+  Printer,
+  ScanLine,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp,
+  Timestamp,
+  updateDoc,
+} from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import PatientPrintChart, { type PatientPrintData } from "@/components/PatientPrintChart";
 import { auth, db } from "@/lib/firebase";
 import { rfidReader, type ReaderStatus } from "@/lib/rfid-serial";
 
-type Patient = { id: string; patientId: string; name: string; number: string; address: string; status: "active" | "archived"; dateJoined: Timestamp | null };
+type Patient = {
+  id: string;
+  patientId: string;
+  name: string;
+  number: string;
+  address: string;
+  status: "active" | "archived";
+  dateJoined: Timestamp | null;
+};
 type TextItem = { id: string; text: string };
 type Allergy = { id: string; allergen: string; reaction: string };
 type Medication = { id: string; name: string; dosage: string; purpose: string };
 type Form = {
-  firstName: string; lastName: string; middleName: string; birthDate: string; sex: string; number: string; email: string; address: string;
-  emergencyName: string; relationship: string; otherRelationship: string; emergencyNumber: string; emergencyEmail: string; emergencyAddress: string; sameEmergencyAddress: boolean;
-  noConditions: boolean; conditions: TextItem[]; noAllergies: boolean; allergies: Allergy[]; noMedications: boolean; medications: Medication[];
+  firstName: string;
+  lastName: string;
+  middleName: string;
+  birthDate: string;
+  sex: string;
+  number: string;
+  email: string;
+  address: string;
+  emergencyName: string;
+  relationship: string;
+  otherRelationship: string;
+  emergencyNumber: string;
+  emergencyEmail: string;
+  emergencyAddress: string;
+  sameEmergencyAddress: boolean;
+  noConditions: boolean;
+  conditions: TextItem[];
+  noAllergies: boolean;
+  allergies: Allergy[];
+  noMedications: boolean;
+  medications: Medication[];
 };
-type Mode = "idle" | "add-scan" | "edit-scan" | "view-scan" | "form" | "confirm-one" | "confirm-two";
+type Mode =
+  | "idle"
+  | "add-scan"
+  | "edit-scan"
+  | "view-scan"
+  | "form"
+  | "confirm-one"
+  | "confirm-two";
 
 const relationships = ["Parent", "Spouse", "Sibling", "Child", "Other"];
 const id = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const emptyForm = (): Form => ({
-  firstName: "", lastName: "", middleName: "", birthDate: "", sex: "", number: "", email: "", address: "",
-  emergencyName: "", relationship: "", otherRelationship: "", emergencyNumber: "", emergencyEmail: "", emergencyAddress: "", sameEmergencyAddress: false,
-  noConditions: false, conditions: [{ id: id(), text: "" }], noAllergies: false, allergies: [{ id: id(), allergen: "", reaction: "" }], noMedications: false, medications: [{ id: id(), name: "", dosage: "", purpose: "" }],
+  firstName: "",
+  lastName: "",
+  middleName: "",
+  birthDate: "",
+  sex: "",
+  number: "",
+  email: "",
+  address: "",
+  emergencyName: "",
+  relationship: "",
+  otherRelationship: "",
+  emergencyNumber: "",
+  emergencyEmail: "",
+  emergencyAddress: "",
+  sameEmergencyAddress: false,
+  noConditions: false,
+  conditions: [{ id: id(), text: "" }],
+  noAllergies: false,
+  allergies: [{ id: id(), allergen: "", reaction: "" }],
+  noMedications: false,
+  medications: [{ id: id(), name: "", dosage: "", purpose: "" }],
 });
 
-const text = (value: unknown) => typeof value === "string" ? value : "";
-const joinedName = (form: Form) => [form.lastName.trim(), form.firstName.trim(), form.middleName.trim()].filter(Boolean).join(", ");
-const formatDate = (value: Timestamp | null) => value ? value.toDate().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—";
-function age(value: string) { if (!value) return ""; const born = new Date(`${value}T00:00:00`); const today = new Date(); let result = today.getFullYear() - born.getFullYear(); if (today < new Date(today.getFullYear(), born.getMonth(), born.getDate())) result--; return String(Math.max(0, result)); }
-
-function BirthdatePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return <Input type="date" value={value} onChange={(event) => onChange(event.target.value)} aria-label="Birthdate" />;
+const text = (value: unknown) => (typeof value === "string" ? value : "");
+const joinedName = (form: Form) =>
+  [form.lastName.trim(), form.firstName.trim(), form.middleName.trim()]
+    .filter(Boolean)
+    .join(", ");
+const formatDate = (value: Timestamp | null) =>
+  value
+    ? value
+        .toDate()
+        .toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          timeZone: "UTC",
+        })
+    : "—";
+function age(value: string) {
+  if (!value) return "";
+  const born = new Date(`${value}T00:00:00`);
+  const today = new Date();
+  let result = today.getFullYear() - born.getFullYear();
+  if (today < new Date(today.getFullYear(), born.getMonth(), born.getDate()))
+    result--;
+  return String(Math.max(0, result));
+}
+function printPatientData(form: Form, id: string, updatedBy: string): PatientPrintData {
+  return {
+    id,
+    lastUpdated: new Date().toLocaleDateString("en-PH"),
+    fullName: joinedName(form),
+    age: age(form.birthDate),
+    sex: form.sex,
+    contactNumber: form.number,
+    email: form.email,
+    address: form.address,
+    emergency: {
+      name: form.emergencyName,
+      relationship: form.relationship === "Other" ? form.otherRelationship : form.relationship,
+      phone: form.emergencyNumber,
+      email: form.emergencyEmail,
+      address: form.emergencyAddress,
+      sameAsPatient: form.sameEmergencyAddress,
+    },
+    conditions: form.noConditions ? [] : form.conditions.map((item) => item.text),
+    allergies: form.noAllergies ? [] : form.allergies.map(({ allergen, reaction }) => ({ allergen, reaction })),
+    medications: form.noMedications ? [] : form.medications.map(({ name, dosage, purpose }) => ({ name, dosage, purpose })),
+    updatedBy,
+  };
 }
 
-function Section({ number, title, children }: { number: number; title: string; children: React.ReactNode }) { return <section className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-t-4 border-primary bg-background px-5 py-3"><h3 className="font-semibold">{number}. {title}</h3></div><div className="space-y-5 p-5">{children}</div></section>; }
-function Remove({ disabled, onClick }: { disabled: boolean; onClick: () => void }) { return <button type="button" disabled={disabled} onClick={onClick} className="text-muted-foreground disabled:opacity-30"><Trash2 className="size-4" /></button>; }
+function BirthdatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Input
+      type="date"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label="Birthdate"
+    />
+  );
+}
+
+function Section({
+  number,
+  title,
+  children,
+}: {
+  number: number;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="border-t-4 border-primary bg-background px-5 py-3">
+        <h3 className="font-semibold">
+          {number}. {title}
+        </h3>
+      </div>
+      <div className="space-y-5 p-5">{children}</div>
+    </section>
+  );
+}
+function Remove({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="text-muted-foreground disabled:opacity-30"
+    >
+      <Trash2 className="size-4" />
+    </button>
+  );
+}
 
 export function PatientTable() {
   const [patients, setPatients] = React.useState<Patient[]>([]);
@@ -46,117 +212,1709 @@ export function PatientTable() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [mode, setMode] = React.useState<Mode>("idle");
-  const [readerStatus, setReaderStatus] = React.useState<ReaderStatus>(rfidReader.getStatus());
+  const [readerStatus, setReaderStatus] = React.useState<ReaderStatus>(
+    rfidReader.getStatus(),
+  );
   const [uid, setUid] = React.useState("");
   const [form, setForm] = React.useState<Form>(emptyForm);
   const [editing, setEditing] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [canManage, setCanManage] = React.useState(false);
-  const [patientFilter, setPatientFilter] = React.useState<"active" | "archived">("active");
+  const [staffName, setStaffName] = React.useState("Staff");
+  const [patientFilter, setPatientFilter] = React.useState<
+    "active" | "archived"
+  >("active");
   const [readOnly, setReadOnly] = React.useState(false);
-  const [confirmationIntent, setConfirmationIntent] = React.useState<"save" | "delete" | null>(null);
-  const inputClass = "border-0 border-b border-border bg-transparent px-0 shadow-none focus-visible:ring-0";
+  const [printAfterView, setPrintAfterView] = React.useState(false);
+  const [searchingByRfid, setSearchingByRfid] = React.useState(false);
+  const [confirmationIntent, setConfirmationIntent] = React.useState<
+    "save" | "restore" | "delete" | null
+  >(null);
+  const inputClass =
+    "border-0 border-b border-border bg-transparent px-0 shadow-none focus-visible:ring-0";
 
   React.useEffect(() => {
     const userId = auth.currentUser?.uid;
     if (!userId) return;
     return onSnapshot(doc(db, "staffs", userId), (snapshot) => {
       const profile = snapshot.data();
-      setCanManage(profile?.role === "Administrator" && profile?.status === "active");
+      setCanManage(
+        profile?.role === "Administrator" && profile?.status === "active",
+      );
+      setStaffName(
+        text(profile?.fullName) ||
+          [
+            text(profile?.lastName),
+            text(profile?.middleInitial),
+            text(profile?.firstName),
+          ]
+            .filter(Boolean)
+            .join(" ") ||
+          auth.currentUser?.displayName ||
+          "Staff",
+      );
     });
   }, []);
-  React.useEffect(() => onSnapshot(collection(db, "patients"), (snapshot) => {
-    setPatients(snapshot.docs.map((item) => {
-      const data = item.data();
-      return { id: item.id, patientId: text(data.patientId) || item.id, name: text(data.name) || "Unnamed patient", number: text(data.number) || "—", address: text(data.address) || "—", status: data.status === "archived" ? "archived" : "active", dateJoined: data.dateJoined instanceof Timestamp ? data.dateJoined : null };
-    })); setLoading(false);
-  }, () => { setError("Firestore denied this action. Check the patients collection rules for active staff."); setLoading(false); }), []);
+  React.useEffect(
+    () =>
+      onSnapshot(
+        collection(db, "patients"),
+        (snapshot) => {
+          setPatients(
+            snapshot.docs.map((item) => {
+              const data = item.data();
+              return {
+                id: item.id,
+                patientId: text(data.patientId) || item.id,
+                name: text(data.name) || "Unnamed patient",
+                number: text(data.number) || "—",
+                address: text(data.address) || "—",
+                status: data.status === "archived" ? "archived" : "active",
+                dateJoined:
+                  data.dateJoined instanceof Timestamp ? data.dateJoined : null,
+              };
+            }),
+          );
+          setLoading(false);
+        },
+        () => {
+          setError(
+            "Firestore denied this action. Check the patients collection rules for active staff.",
+          );
+          setLoading(false);
+        },
+      ),
+    [],
+  );
   React.useEffect(() => rfidReader.subscribe(setReaderStatus), []);
+  React.useEffect(() => {
+    if (!printAfterView || !readOnly || mode !== "form") return;
 
-  async function card() { if (rfidReader.getStatus() !== "connected") await rfidReader.connect(); return rfidReader.scanCard(); }
-  async function close() { setMode("idle"); setUid(""); setEditing(false); setReadOnly(false); setConfirmationIntent(null); setForm(emptyForm()); await rfidReader.cancelScan(); }
+    const frame = window.requestAnimationFrame(() => {
+      window.print();
+      setPrintAfterView(false);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mode, printAfterView, readOnly]);
+
+  async function card() {
+    if (rfidReader.getStatus() !== "connected") await rfidReader.connect();
+    return rfidReader.scanCard();
+  }
+  async function verifyCard(expectedUid: string, message: string, signalAccepted = true) {
+    if ((await card()) !== expectedUid) {
+      void rfidReader.feedback("rejected");
+      throw new Error(message);
+    }
+    if (signalAccepted) void rfidReader.feedback("accepted");
+  }
+  async function searchByRfid() {
+    setError("");
+    setSearchingByRfid(true);
+    try {
+      const cardUid = await card();
+      const patient = patients.find((item) => item.id === cardUid);
+      if (!patient) {
+        void rfidReader.feedback("rejected");
+        throw new Error("No patient record matches this RFID card.");
+      }
+      void rfidReader.feedback("accepted");
+      setPatientFilter(patient.status);
+      setQuery(patient.patientId);
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : "Could not scan RFID card.";
+      if (message !== "RFID scan cancelled.") setError(message);
+    } finally {
+      setSearchingByRfid(false);
+    }
+  }
+  async function close() {
+    setMode("idle");
+    setUid("");
+    setEditing(false);
+    setReadOnly(false);
+    setPrintAfterView(false);
+    setConfirmationIntent(null);
+    setForm(emptyForm());
+    await rfidReader.cancelScan();
+  }
   function recordForm(data: Record<string, unknown>): Form {
-    const oldName = text(data.name).split(",").map((part) => part.trim());
+    const oldName = text(data.name)
+      .split(",")
+      .map((part) => part.trim());
     const oldParts = (oldName[1] ?? "").split(/\s+/).filter(Boolean);
-    const emergency = data.emergencyContact && typeof data.emergencyContact === "object" ? data.emergencyContact as Record<string, unknown> : {};
+    const emergency =
+      data.emergencyContact && typeof data.emergencyContact === "object"
+        ? (data.emergencyContact as Record<string, unknown>)
+        : {};
     const storedRelationship = text(emergency.relationship);
-    const conditions = data.conditions && typeof data.conditions === "object" ? data.conditions as { none?: boolean; items?: unknown[] } : {};
-    const allergies = data.allergies && typeof data.allergies === "object" ? data.allergies as { none?: boolean; items?: unknown[] } : {};
-    const medications = data.medications && typeof data.medications === "object" ? data.medications as { none?: boolean; items?: unknown[] } : {};
-    return { ...emptyForm(), firstName: text(data.firstName) || oldParts.shift() || "", lastName: text(data.lastName) || oldName[0] || "", middleName: text(data.middleName) || oldParts.join(" "), birthDate: data.birthDate instanceof Timestamp ? data.birthDate.toDate().toISOString().slice(0, 10) : "", sex: text(data.sex), number: text(data.number), email: text(data.email), address: text(data.address), emergencyName: text(emergency.name), relationship: relationships.includes(storedRelationship) ? storedRelationship : storedRelationship ? "Other" : "", otherRelationship: relationships.includes(storedRelationship) ? "" : storedRelationship, emergencyNumber: text(emergency.number), emergencyEmail: text(emergency.email), emergencyAddress: text(emergency.address), sameEmergencyAddress: emergency.sameAsPatientAddress === true, noConditions: conditions.none === true, conditions: Array.isArray(conditions.items) && conditions.items.length ? conditions.items.map((item) => ({ id: id(), text: text(item) })) : [{ id: id(), text: "" }], noAllergies: allergies.none === true, allergies: Array.isArray(allergies.items) && allergies.items.length ? allergies.items.map((item) => { const value = item && typeof item === "object" ? item as Record<string, unknown> : {}; return { id: id(), allergen: text(value.allergen), reaction: text(value.reaction) }; }) : [{ id: id(), allergen: "", reaction: "" }], noMedications: medications.none === true, medications: Array.isArray(medications.items) && medications.items.length ? medications.items.map((item) => { const value = item && typeof item === "object" ? item as Record<string, unknown> : {}; return { id: id(), name: text(value.name), dosage: text(value.dosage), purpose: text(value.purpose) }; }) : [{ id: id(), name: "", dosage: "", purpose: "" }] };
+    const conditions =
+      data.conditions && typeof data.conditions === "object"
+        ? (data.conditions as { none?: boolean; items?: unknown[] })
+        : {};
+    const allergies =
+      data.allergies && typeof data.allergies === "object"
+        ? (data.allergies as { none?: boolean; items?: unknown[] })
+        : {};
+    const medications =
+      data.medications && typeof data.medications === "object"
+        ? (data.medications as { none?: boolean; items?: unknown[] })
+        : {};
+    return {
+      ...emptyForm(),
+      firstName: text(data.firstName) || oldParts.shift() || "",
+      lastName: text(data.lastName) || oldName[0] || "",
+      middleName: text(data.middleName) || oldParts.join(" "),
+      birthDate:
+        data.birthDate instanceof Timestamp
+          ? data.birthDate.toDate().toISOString().slice(0, 10)
+          : "",
+      sex: text(data.sex),
+      number: text(data.number),
+      email: text(data.email),
+      address: text(data.address),
+      emergencyName: text(emergency.name),
+      relationship: relationships.includes(storedRelationship)
+        ? storedRelationship
+        : storedRelationship
+          ? "Other"
+          : "",
+      otherRelationship: relationships.includes(storedRelationship)
+        ? ""
+        : storedRelationship,
+      emergencyNumber: text(emergency.number),
+      emergencyEmail: text(emergency.email),
+      emergencyAddress: text(emergency.address),
+      sameEmergencyAddress: emergency.sameAsPatientAddress === true,
+      noConditions: conditions.none === true,
+      conditions:
+        Array.isArray(conditions.items) && conditions.items.length
+          ? conditions.items.map((item) => ({ id: id(), text: text(item) }))
+          : [{ id: id(), text: "" }],
+      noAllergies: allergies.none === true,
+      allergies:
+        Array.isArray(allergies.items) && allergies.items.length
+          ? allergies.items.map((item) => {
+              const value =
+                item && typeof item === "object"
+                  ? (item as Record<string, unknown>)
+                  : {};
+              return {
+                id: id(),
+                allergen: text(value.allergen),
+                reaction: text(value.reaction),
+              };
+            })
+          : [{ id: id(), allergen: "", reaction: "" }],
+      noMedications: medications.none === true,
+      medications:
+        Array.isArray(medications.items) && medications.items.length
+          ? medications.items.map((item) => {
+              const value =
+                item && typeof item === "object"
+                  ? (item as Record<string, unknown>)
+                  : {};
+              return {
+                id: id(),
+                name: text(value.name),
+                dosage: text(value.dosage),
+                purpose: text(value.purpose),
+              };
+            })
+          : [{ id: id(), name: "", dosage: "", purpose: "" }],
+    };
   }
 
-  async function addPatient() { setError(""); setMode("add-scan"); try { const cardUid = await card(); if ((await getDoc(doc(db, "patients", cardUid))).exists()) throw new Error("Patient already exists. Use another RFID card."); setUid(cardUid); setEditing(false); setReadOnly(false); setForm(emptyForm()); setMode("form"); } catch (caught) { const message = caught instanceof Error ? caught.message : "Could not scan RFID card."; if (message !== "RFID scan cancelled.") setError(message); setMode("idle"); } }
-  async function editPatient(patient: Patient) { setError(""); setMode("edit-scan"); try { const cardUid = await card(); if (cardUid !== patient.id) throw new Error("This RFID card does not match the selected patient."); const snapshot = await getDoc(doc(db, "patients", cardUid)); if (!snapshot.exists()) throw new Error("Patient record no longer exists."); setUid(cardUid); setForm(recordForm(snapshot.data())); setEditing(true); setReadOnly(false); setMode("form"); } catch (caught) { const message = caught instanceof Error ? caught.message : "Could not verify the RFID card."; if (message !== "RFID scan cancelled.") setError(message); setMode("idle"); } }
-  async function viewPatient(patient: Patient) { setError(""); setMode("view-scan"); try { const cardUid = await card(); if (cardUid !== patient.id) throw new Error("This RFID card does not match the selected patient."); const snapshot = await getDoc(doc(db, "patients", patient.id)); if (!snapshot.exists()) throw new Error("Patient record no longer exists."); setUid(patient.id); setForm(recordForm(snapshot.data())); setEditing(false); setReadOnly(true); setMode("form"); } catch (caught) { const message = caught instanceof Error ? caught.message : "Could not verify the RFID card."; if (message !== "RFID scan cancelled.") setError(message); setMode("idle"); } }
-  function valid() { const relation = form.relationship === "Other" ? form.otherRelationship.trim() : form.relationship; if (!uid || !form.firstName.trim() || !form.lastName.trim() || !form.birthDate || !form.sex || !form.number.trim() || !form.email.trim() || !form.address.trim() || !form.emergencyName.trim() || !relation || !form.emergencyNumber.trim()) { setError("Complete all required patient and emergency-contact fields."); return false; } return true; }
+  async function addPatient() {
+    setError("");
+    setMode("add-scan");
+    try {
+      const cardUid = await card();
+      if ((await getDoc(doc(db, "patients", cardUid))).exists()) {
+        void rfidReader.feedback("rejected");
+        throw new Error("Patient already exists. Use another RFID card.");
+      }
+      void rfidReader.feedback("accepted");
+      setUid(cardUid);
+      setEditing(false);
+      setReadOnly(false);
+      setForm(emptyForm());
+      setMode("form");
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : "Could not scan RFID card.";
+      if (message !== "RFID scan cancelled.") setError(message);
+      setMode("idle");
+    }
+  }
+  async function editPatient(patient: Patient) {
+    setError("");
+    setMode("edit-scan");
+    try {
+      const cardUid = await card();
+      if (cardUid !== patient.id) {
+        void rfidReader.feedback("rejected");
+        throw new Error("This RFID card does not match the selected patient.");
+      }
+      const snapshot = await getDoc(doc(db, "patients", cardUid));
+      if (!snapshot.exists())
+        throw new Error("Patient record no longer exists.");
+      void rfidReader.feedback("accepted");
+      setUid(cardUid);
+      setForm(recordForm(snapshot.data()));
+      setEditing(true);
+      setReadOnly(false);
+      setMode("form");
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Could not verify the RFID card.";
+      if (message !== "RFID scan cancelled.") setError(message);
+      setMode("idle");
+    }
+  }
+  async function viewPatient(patient: Patient, print = false) {
+    setError("");
+    setMode("view-scan");
+    try {
+      const cardUid = await card();
+      if (cardUid !== patient.id) {
+        void rfidReader.feedback("rejected");
+        throw new Error("This RFID card does not match the selected patient.");
+      }
+      const snapshot = await getDoc(doc(db, "patients", patient.id));
+      if (!snapshot.exists())
+        throw new Error("Patient record no longer exists.");
+      void rfidReader.feedback("accepted");
+      setUid(patient.id);
+      setForm(recordForm(snapshot.data()));
+      setEditing(false);
+      setReadOnly(true);
+      setPrintAfterView(print);
+      setMode("form");
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Could not verify the RFID card.";
+      if (message !== "RFID scan cancelled.") setError(message);
+      setPrintAfterView(false);
+      setMode("idle");
+    }
+  }
+  function valid() {
+    const relation =
+      form.relationship === "Other"
+        ? form.otherRelationship.trim()
+        : form.relationship;
+    if (
+      !uid ||
+      !form.firstName.trim() ||
+      !form.lastName.trim() ||
+      !form.birthDate ||
+      !form.sex ||
+      !form.number.trim() ||
+      !form.email.trim() ||
+      !form.address.trim() ||
+      !form.emergencyName.trim() ||
+      !relation ||
+      !form.emergencyNumber.trim()
+    ) {
+      setError("Complete all required patient and emergency-contact fields.");
+      return false;
+    }
+    return true;
+  }
   function documentData() {
-    const conditions = form.noConditions ? [] : form.conditions.filter((item) => item.text.trim()).map((item) => item.text.trim());
-    const allergies = form.noAllergies ? [] : form.allergies.filter((item) => item.allergen.trim() || item.reaction.trim()).map(({ allergen, reaction }) => ({ allergen: allergen.trim(), reaction: reaction.trim() }));
-    const medications = form.noMedications ? [] : form.medications.filter((item) => item.name.trim() || item.dosage.trim() || item.purpose.trim()).map(({ name, dosage, purpose }) => ({ name: name.trim(), dosage: dosage.trim(), purpose: purpose.trim() }));
-    const relationship = form.relationship === "Other" ? form.otherRelationship.trim() : form.relationship;
-    return { rfidUID: uid, name: joinedName(form), firstName: form.firstName.trim(), lastName: form.lastName.trim(), middleName: form.middleName.trim(), birthDate: Timestamp.fromDate(new Date(`${form.birthDate}T00:00:00.000Z`)), age: Number(age(form.birthDate)), sex: form.sex, number: form.number.trim(), email: form.email.trim().toLowerCase(), address: form.address.trim(), emergencyContact: { name: form.emergencyName.trim(), relationship, number: form.emergencyNumber.trim(), email: form.emergencyEmail.trim().toLowerCase(), address: form.sameEmergencyAddress ? form.address.trim() : form.emergencyAddress.trim(), sameAsPatientAddress: form.sameEmergencyAddress }, conditions: { none: form.noConditions || conditions.length === 0, items: conditions }, allergies: { none: form.noAllergies || allergies.length === 0, items: allergies }, medications: { none: form.noMedications || medications.length === 0, items: medications }, updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.uid ?? null };
+    const conditions = form.noConditions
+      ? []
+      : form.conditions
+          .filter((item) => item.text.trim())
+          .map((item) => item.text.trim());
+    const allergies = form.noAllergies
+      ? []
+      : form.allergies
+          .filter((item) => item.allergen.trim() || item.reaction.trim())
+          .map(({ allergen, reaction }) => ({
+            allergen: allergen.trim(),
+            reaction: reaction.trim(),
+          }));
+    const medications = form.noMedications
+      ? []
+      : form.medications
+          .filter(
+            (item) =>
+              item.name.trim() || item.dosage.trim() || item.purpose.trim(),
+          )
+          .map(({ name, dosage, purpose }) => ({
+            name: name.trim(),
+            dosage: dosage.trim(),
+            purpose: purpose.trim(),
+          }));
+    const relationship =
+      form.relationship === "Other"
+        ? form.otherRelationship.trim()
+        : form.relationship;
+    return {
+      rfidUID: uid,
+      name: joinedName(form),
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      middleName: form.middleName.trim(),
+      birthDate: Timestamp.fromDate(
+        new Date(`${form.birthDate}T00:00:00.000Z`),
+      ),
+      age: Number(age(form.birthDate)),
+      sex: form.sex,
+      number: form.number.trim(),
+      email: form.email.trim().toLowerCase(),
+      address: form.address.trim(),
+      emergencyContact: {
+        name: form.emergencyName.trim(),
+        relationship,
+        number: form.emergencyNumber.trim(),
+        email: form.emergencyEmail.trim().toLowerCase(),
+        address: form.sameEmergencyAddress
+          ? form.address.trim()
+          : form.emergencyAddress.trim(),
+        sameAsPatientAddress: form.sameEmergencyAddress,
+      },
+      conditions: {
+        none: form.noConditions || conditions.length === 0,
+        items: conditions,
+      },
+      allergies: {
+        none: form.noAllergies || allergies.length === 0,
+        items: allergies,
+      },
+      medications: {
+        none: form.noMedications || medications.length === 0,
+        items: medications,
+      },
+      updatedAt: serverTimestamp(),
+      updatedBy: auth.currentUser?.uid ?? null,
+    };
   }
-  async function persist() { const data = documentData(); await runTransaction(db, async (transaction) => { const patientRef = doc(db, "patients", uid); if (editing) { if (!(await transaction.get(patientRef)).exists()) throw new Error("Patient record no longer exists."); transaction.update(patientRef, data); return; } const counterRef = doc(db, "counters", "patients"); const [patient, counter] = await Promise.all([transaction.get(patientRef), transaction.get(counterRef)]); if (patient.exists()) throw new Error("Patient already exists. Use another RFID card."); const current = typeof counter.data()?.lastPatientNumber === "number" ? counter.data()?.lastPatientNumber : 1; const next = current + 1; transaction.set(counterRef, { lastPatientNumber: next, updatedAt: serverTimestamp() }); transaction.set(patientRef, { ...data, patientId: String(next).padStart(3, "0"), dateJoined: serverTimestamp(), createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid ?? null }); }); }
-  async function save(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); if (!valid()) return; setSaving(true); setError(""); setConfirmationIntent("save"); try { setMode("confirm-one"); if (await card() !== uid) throw new Error("First confirmation did not match this patient card."); setMode("confirm-two"); if (await card() !== uid) throw new Error("Second confirmation did not match this patient card."); await persist(); await close(); } catch (caught) { const message = caught instanceof Error ? caught.message : "Could not save patient record."; if (message !== "RFID scan cancelled.") setError(message); setMode("form"); } finally { setSaving(false); } }
-  async function setArchiveStatus(status: "active" | "archived") { if (!uid) return; setSaving(true); setError(""); try { await updateDoc(doc(db, "patients", uid), { status, updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.uid ?? null }); await close(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not update patient status."); } finally { setSaving(false); } }
-  async function deletePatient() { if (!uid) return; setSaving(true); setError(""); setConfirmationIntent("delete"); try { setMode("confirm-one"); if (await card() !== uid) throw new Error("First confirmation did not match this patient card."); setMode("confirm-two"); if (await card() !== uid) throw new Error("Second confirmation did not match this patient card."); await deleteDoc(doc(db, "patients", uid)); await close(); } catch (caught) { const message = caught instanceof Error ? caught.message : "Could not delete patient record."; if (message !== "RFID scan cancelled.") setError(message); setMode("form"); } finally { setSaving(false); } }
+  async function persist() {
+    const data = documentData();
+    await runTransaction(db, async (transaction) => {
+      const patientRef = doc(db, "patients", uid);
+      if (editing) {
+        if (!(await transaction.get(patientRef)).exists())
+          throw new Error("Patient record no longer exists.");
+        transaction.update(patientRef, data);
+        return;
+      }
+      const counterRef = doc(db, "counters", "patients");
+      const [patient, counter] = await Promise.all([
+        transaction.get(patientRef),
+        transaction.get(counterRef),
+      ]);
+      if (patient.exists())
+        throw new Error("Patient already exists. Use another RFID card.");
+      const current =
+        typeof counter.data()?.lastPatientNumber === "number"
+          ? counter.data()?.lastPatientNumber
+          : 1;
+      const next = current + 1;
+      transaction.set(counterRef, {
+        lastPatientNumber: next,
+        updatedAt: serverTimestamp(),
+      });
+      transaction.set(patientRef, {
+        ...data,
+        patientId: String(next).padStart(3, "0"),
+        dateJoined: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        createdBy: auth.currentUser?.uid ?? null,
+      });
+    });
+  }
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!valid()) return;
+    setSaving(true);
+    setError("");
+    setConfirmationIntent("save");
+    try {
+      setMode("confirm-one");
+      await verifyCard(uid, "First confirmation did not match this patient card.", false);
+      setMode("confirm-two");
+      await verifyCard(uid, "Second confirmation did not match this patient card.", false);
+      await persist();
+      void rfidReader.feedback("accepted");
+      await close();
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Could not save patient record.";
+      if (message !== "RFID scan cancelled.") setError(message);
+      setMode("form");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function setArchiveStatus(status: "active" | "archived") {
+    if (!uid) return;
+    setSaving(true);
+    setError("");
+    try {
+      if (status === "active") {
+        setConfirmationIntent("restore");
+        setMode("confirm-one");
+        await verifyCard(uid, "Confirmation did not match this patient card.");
+      }
+      await updateDoc(doc(db, "patients", uid), {
+        status,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.uid ?? null,
+      });
+      await close();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not update patient status.",
+      );
+      setMode("form");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function deletePatient(patientId = uid, returnToForm = true) {
+    if (!patientId) return;
+    setSaving(true);
+    setError("");
+    setConfirmationIntent("delete");
+    try {
+      setMode("confirm-one");
+      await verifyCard(patientId, "First confirmation did not match this patient card.");
+      setMode("confirm-two");
+      await verifyCard(patientId, "Second confirmation did not match this patient card.");
+      await deleteDoc(doc(db, "patients", patientId));
+      await close();
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Could not delete patient record.";
+      if (message !== "RFID scan cancelled.") setError(message);
+      setMode(returnToForm ? "form" : "idle");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function restorePatient(patient: Patient) {
+    setSaving(true);
+    setError("");
+    setConfirmationIntent("restore");
+    try {
+      setMode("confirm-one");
+      await verifyCard(patient.id, "Confirmation did not match this patient card.");
+      await updateDoc(doc(db, "patients", patient.id), {
+        status: "active",
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.uid ?? null,
+      });
+      await close();
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Could not restore patient record.";
+      if (message !== "RFID scan cancelled.") setError(message);
+      setMode("idle");
+    } finally {
+      setSaving(false);
+    }
+  }
 
-  const visible = patients.filter((patient) => { const search = query.trim().toLowerCase(); return patient.status === patientFilter && (!search || [patient.patientId, patient.name, patient.number, patient.address].some((value) => value.toLowerCase().includes(search))); });
+  const visible = patients.filter((patient) => {
+    const search = query.trim().toLowerCase();
+    return (
+      patient.status === patientFilter &&
+      (!search ||
+        [patient.patientId, patient.name, patient.number, patient.address].some(
+          (value) => value.toLowerCase().includes(search),
+        ))
+    );
+  });
   const scanning = mode !== "idle" && mode !== "form";
-  const prompt = mode === "add-scan" ? "Hold an unregistered RFID card near the reader." : mode === "edit-scan" ? "Tap this patient’s RFID card to open the record." : mode === "view-scan" ? "Tap this patient’s RFID card to view the record." : mode === "confirm-one" ? `Tap the same patient card to ${confirmationIntent === "delete" ? "confirm deletion" : "confirm save"} (1 of 2).` : `Tap the same patient card again to ${confirmationIntent === "delete" ? "permanently delete" : "confirm save"} (2 of 2).`;
+  const prompt =
+    mode === "add-scan"
+      ? "Hold an unregistered RFID card near the reader."
+      : mode === "edit-scan"
+        ? "Tap this patient’s RFID card to open the record."
+        : mode === "view-scan"
+          ? "Tap this patient’s RFID card to view the record."
+          : mode === "confirm-one"
+            ? confirmationIntent === "restore"
+              ? "Tap the same patient card to restore this patient (1 of 1)."
+              : `Tap the same patient card to ${confirmationIntent === "delete" ? "confirm deletion" : "confirm save"} (1 of 2).`
+            : `Tap the same patient card again to ${confirmationIntent === "delete" ? "permanently delete" : "confirm save"} (2 of 2).`;
 
-  return <PatientWorkspace patients={visible} loading={loading} query={query} setQuery={setQuery} filter={patientFilter} setFilter={setPatientFilter} canManage={canManage} onAdd={() => void addPatient()} onView={(patient) => void viewPatient(patient)} onEdit={(patient) => void editPatient(patient)} error={error} mode={mode} prompt={prompt} readerStatus={readerStatus} readOnly={readOnly} form={form} setForm={setForm} inputClass={inputClass} saving={saving} editing={editing} onSave={save} onClose={() => void close()} onArchive={() => void setArchiveStatus(patientFilter === "archived" ? "active" : "archived")} onDelete={() => void deletePatient()} />;
+  return (
+    <PatientWorkspace
+      patients={visible}
+      loading={loading}
+      query={query}
+      setQuery={setQuery}
+      filter={patientFilter}
+      setFilter={setPatientFilter}
+      canManage={canManage}
+      onAdd={() => void addPatient()}
+      onScanSearch={() => void searchByRfid()}
+      searchingByRfid={searchingByRfid}
+      onView={(patient) => void viewPatient(patient)}
+      onPrint={(patient) => void viewPatient(patient, true)}
+      onEdit={(patient) => void editPatient(patient)}
+      onRestore={(patient) => void restorePatient(patient)}
+      onDeletePatient={(patient) => void deletePatient(patient.id, false)}
+      error={error}
+      mode={mode}
+      prompt={prompt}
+      readerStatus={readerStatus}
+      readOnly={readOnly}
+      form={form}
+      staffName={staffName}
+      printPatient={printPatientData(form, uid, staffName)}
+      setForm={setForm}
+      inputClass={inputClass}
+      saving={saving}
+      editing={editing}
+      onSave={save}
+      onClose={() => void close()}
+      onArchive={() =>
+        void setArchiveStatus(
+          patientFilter === "archived" ? "active" : "archived",
+        )
+      }
+      onDelete={() => void deletePatient()}
+    />
+  );
 
-  return <div className="space-y-5"><div><p className="text-sm font-medium text-primary">Records workspace</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Patient Information</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">View patient records connected to Firestore.</p></div><section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6"><div className="grid gap-3 border-b border-border pb-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center"><div>{canManage ? <Button size="sm" className="rounded-lg" onClick={() => void addPatient()}><Plus className="size-4" /> Add Patient</Button> : null}</div><label className="relative w-full max-w-sm"><ScanLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Scan to search" className="bg-background pl-9" aria-label="Search patients" /></label></div>{error ? <p role="alert" className="mb-4 mt-4 text-sm text-secondary">{error}</p> : null}<div className="overflow-x-auto rounded-xl border border-border"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-background text-xs font-semibold uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Patient ID</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Number</th><th className="px-4 py-3">Address</th><th className="px-4 py-3">Date Joined</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-border">{loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Loading patients…</td></tr> : visible.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No patient records found.</td></tr> : visible.map((patient) => <tr key={patient.id} className="transition-colors duration-200 hover:bg-accent/40"><td className="px-4 py-4 font-medium">{patient.patientId}</td><td className="px-4 py-4 font-medium">{patient.name}</td><td className="px-4 py-4 text-muted-foreground">{patient.number}</td><td className="px-4 py-4 text-muted-foreground">{patient.address}</td><td className="px-4 py-4 text-muted-foreground">{formatDate(patient.dateJoined)}</td><td className="px-4 py-4"><div className="flex justify-end gap-1"><Icon disabled title="Show patient information — coming soon"><Eye className="size-4" /></Icon>{canManage ? <Icon title="Edit patient information" onClick={() => void editPatient(patient)}><Pencil className="size-4" /></Icon> : null}<Icon disabled title="Print patient information — coming soon"><Printer className="size-4" /></Icon></div></td></tr>)}</tbody></table></div></section>{mode !== "idle" ? <Modal title={scanning ? "Tap RFID card" : editing ? "Edit Patient Information" : "Patient Information Form"} subtitle={scanning ? prompt : editing ? "Update the record, then confirm with the patient card twice." : "Complete the new patient record."} onClose={() => void close()} wide={mode === "form"}>{scanning ? <ScanStatus status={readerStatus} prompt={prompt} /> : <PatientFields form={form} setForm={setForm} inputClass={inputClass} saving={saving} editing={editing} onSubmit={save} onCancel={() => void close()} />}</Modal> : null}</div>;
+  return (
+    <div className="patient-workspace space-y-5">
+      <div>
+        <p className="text-sm font-medium text-primary">Records workspace</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">
+          Patient Information
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          View patient records connected to Firestore.
+        </p>
+      </div>
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
+        <div className="grid gap-3 border-b border-border pb-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+          <div>
+            {canManage ? (
+              <Button
+                size="sm"
+                className="rounded-lg"
+                onClick={() => void addPatient()}
+              >
+                <Plus className="size-4" /> Add Patient
+              </Button>
+            ) : null}
+          </div>
+          <label className="relative w-full max-w-sm">
+            <ScanLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Scan to search"
+              className="bg-background pl-9"
+              aria-label="Search patients"
+            />
+          </label>
+        </div>
+        {error ? (
+          <p role="alert" className="mb-4 mt-4 text-sm text-secondary">
+            {error}
+          </p>
+        ) : null}
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="bg-background text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">Patient ID</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Number</th>
+                <th className="px-4 py-3">Address</th>
+                <th className="px-4 py-3">Date Joined</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-muted-foreground"
+                  >
+                    Loading patients…
+                  </td>
+                </tr>
+              ) : visible.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-muted-foreground"
+                  >
+                    No patient records found.
+                  </td>
+                </tr>
+              ) : (
+                visible.map((patient) => (
+                  <tr
+                    key={patient.id}
+                    className="transition-colors duration-200 hover:bg-accent/40"
+                  >
+                    <td className="px-4 py-4 font-medium">
+                      {patient.patientId}
+                    </td>
+                    <td className="px-4 py-4 font-medium">{patient.name}</td>
+                    <td className="px-4 py-4 text-muted-foreground">
+                      {patient.number}
+                    </td>
+                    <td className="px-4 py-4 text-muted-foreground">
+                      {patient.address}
+                    </td>
+                    <td className="px-4 py-4 text-muted-foreground">
+                      {formatDate(patient.dateJoined)}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex justify-end gap-1">
+                        <Icon
+                          disabled
+                          title="Show patient information — coming soon"
+                        >
+                          <Eye className="size-4" />
+                        </Icon>
+                        {canManage ? (
+                          <Icon
+                            title="Edit patient information"
+                            onClick={() => void editPatient(patient)}
+                          >
+                            <Pencil className="size-4" />
+                          </Icon>
+                        ) : null}
+                        <Icon
+                          disabled
+                          title="Print patient information — coming soon"
+                        >
+                          <Printer className="size-4" />
+                        </Icon>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {mode !== "idle" ? (
+        <Modal
+          title={
+            scanning
+              ? "Tap RFID card"
+              : editing
+                ? "Edit Patient Information"
+                : "Patient Information Form"
+          }
+          subtitle={
+            scanning
+              ? prompt
+              : editing
+                ? "Update the record, then confirm with the patient card twice."
+                : "Complete the new patient record."
+          }
+          onClose={() => void close()}
+          wide={mode === "form"}
+        >
+          {scanning ? (
+            <ScanStatus status={readerStatus} prompt={prompt} />
+          ) : (
+            <PatientFields
+              form={form}
+              setForm={setForm}
+              inputClass={inputClass}
+              saving={saving}
+              editing={editing}
+              onSubmit={save}
+              onCancel={() => void close()}
+            />
+          )}
+        </Modal>
+      ) : null}
+    </div>
+  );
 }
 
-function Icon({ children, title, onClick, disabled = false }: { children: React.ReactNode; title: string; onClick?: () => void; disabled?: boolean }) { return <button type="button" disabled={disabled} onClick={onClick} title={title} className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60">{children}</button>; }
-function Modal({ title, subtitle, onClose, wide, children }: { title: string; subtitle: string; onClose: () => void; wide: boolean; children: React.ReactNode }) { return <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"><section role="dialog" aria-modal="true" className={`w-full ${wide ? "max-w-4xl" : "max-w-lg"} max-h-[92vh] overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl`}><div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{subtitle}</p></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div>{children}</section></div>; }
-function ScanStatus({ status, prompt }: { status: ReaderStatus; prompt: string }) { const good = status === "connected" || status === "scanning"; return <div className="mt-6 rounded-xl border border-border bg-background p-5 text-center"><ScanLine className="mx-auto size-8 text-primary" /><div className="mt-3 flex items-center justify-center gap-2 text-sm font-medium"><span className={`size-2.5 rounded-full ${good ? "bg-emerald-500" : status === "connecting" ? "bg-amber-400" : "bg-secondary"}`} />{status === "scanning" ? "Waiting for RFID card" : status === "connected" ? "RFID reader connected" : status === "connecting" ? "Connecting RFID reader…" : "RFID reader not connected"}</div><p className="mt-1 text-xs text-muted-foreground">{status === "scanning" ? prompt : status === "connecting" ? "Choose the ESP32 in the browser prompt." : "Connect the ESP32 by USB, then try again."}</p></div>; }
-
-function PatientFields({ form, setForm, inputClass, saving, editing, onSubmit, onCancel }: { form: Form; setForm: React.Dispatch<React.SetStateAction<Form>>; inputClass: string; saving: boolean; editing: boolean; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
-  const change = <K extends keyof Form>(key: K, value: Form[K]) => setForm((current) => ({ ...current, [key]: value }));
-  return <form className="mt-6 space-y-5" onSubmit={onSubmit}>
-    <Section number={1} title="Patient Information"><div className="grid gap-5 sm:grid-cols-2">
-      <Field label="First Name" required><Input value={form.firstName} onChange={(event) => change("firstName", event.target.value)} required className={inputClass} /></Field>
-      <Field label="Last Name" required><Input value={form.lastName} onChange={(event) => change("lastName", event.target.value)} required className={inputClass} /></Field>
-      <Field label="Middle Name"><Input value={form.middleName} onChange={(event) => change("middleName", event.target.value)} className={inputClass} /></Field>
-      <Field label="Birthdate" required><BirthdatePicker value={form.birthDate} onChange={(value) => change("birthDate", value)} /></Field>
-      <Field label="Age"><Input value={age(form.birthDate)} readOnly placeholder="Years" className={inputClass} /></Field>
-      <fieldset className="space-y-2 text-sm font-medium"><legend>Biological Sex <span className="text-secondary">*</span></legend><div className="flex flex-wrap gap-4 text-sm font-normal">{["Male", "Female", "Intersex"].map((sex) => <label key={sex} className="flex items-center gap-2"><input type="radio" name="sex" value={sex} checked={form.sex === sex} onChange={() => change("sex", sex)} required className="accent-primary" />{sex}</label>)}</div></fieldset>
-      <Field label="Contact Number" required><Input type="tel" value={form.number} onChange={(event) => change("number", event.target.value)} required className={inputClass} /></Field>
-      <Field label="Email Address" required><Input type="email" value={form.email} onChange={(event) => change("email", event.target.value)} required className={inputClass} /></Field>
-      <Field label="Residential Address" required span><Input value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value, emergencyAddress: current.sameEmergencyAddress ? event.target.value : current.emergencyAddress }))} required className={inputClass} /></Field>
-    </div></Section>
-    <Section number={2} title="Emergency Contact"><div className="grid gap-5 sm:grid-cols-2">
-      <Field label="Full Name" required span><Input value={form.emergencyName} onChange={(event) => change("emergencyName", event.target.value)} required className={inputClass} /></Field>
-      <Field label="Relationship" required><select value={form.relationship} onChange={(event) => change("relationship", event.target.value)} required className="h-11 w-full border-0 border-b border-border bg-transparent px-0 text-sm outline-none focus:border-primary"><option value="">Select relationship</option>{relationships.map((value) => <option key={value}>{value}</option>)}</select></Field>
-      {form.relationship === "Other" ? <Field label="Specify relationship" required><Input value={form.otherRelationship} onChange={(event) => change("otherRelationship", event.target.value)} placeholder="e.g., Guardian" required className={inputClass} /></Field> : null}
-      <Field label="Phone Number" required><Input type="tel" value={form.emergencyNumber} onChange={(event) => change("emergencyNumber", event.target.value)} required className={inputClass} /></Field>
-      <Field label="Email Address (optional)"><Input type="email" value={form.emergencyEmail} onChange={(event) => change("emergencyEmail", event.target.value)} className={inputClass} /></Field>
-      <label className="flex items-end gap-2 text-sm"><input type="checkbox" checked={form.sameEmergencyAddress} onChange={(event) => setForm((current) => ({ ...current, sameEmergencyAddress: event.target.checked, emergencyAddress: event.target.checked ? current.address : current.emergencyAddress }))} className="accent-primary" />Same as patient address</label>
-      <Field label="Address (optional)" span><Input value={form.emergencyAddress} disabled={form.sameEmergencyAddress} onChange={(event) => change("emergencyAddress", event.target.value)} className={inputClass} /></Field>
-    </div></Section>
-    <Section number={3} title="Existing or Ongoing Conditions"><Check checked={form.noConditions} onChange={(checked) => change("noConditions", checked)} label="None — Patient has no known ongoing medical conditions" />{!form.noConditions ? <div className="space-y-3">{form.conditions.map((item) => <div key={item.id} className="flex gap-2"><Input value={item.text} onChange={(event) => setForm((current) => ({ ...current, conditions: current.conditions.map((value) => value.id === item.id ? { ...value, text: event.target.value } : value) }))} placeholder="e.g., Hypertension, Type 2 Diabetes" className={inputClass} /><Remove disabled={form.conditions.length === 1} onClick={() => setForm((current) => ({ ...current, conditions: current.conditions.length === 1 ? current.conditions : current.conditions.filter((value) => value.id !== item.id) }))} /></div>)}<Button type="button" variant="ghost" size="sm" onClick={() => setForm((current) => ({ ...current, conditions: [...current.conditions, { id: id(), text: "" }] }))}><Plus className="size-4" /> Add another condition</Button></div> : null}</Section>
-    <Section number={4} title="Known Allergies & Reactions"><Check checked={form.noAllergies} onChange={(checked) => change("noAllergies", checked)} label="No Known Allergies (NKA)" />{!form.noAllergies ? <div className="space-y-3">{form.allergies.map((item) => <div key={item.id} className="flex gap-2"><div className="grid flex-1 gap-3 sm:grid-cols-2"><Input value={item.allergen} onChange={(event) => setForm((current) => ({ ...current, allergies: current.allergies.map((value) => value.id === item.id ? { ...value, allergen: event.target.value } : value) }))} placeholder="Allergen" className={inputClass} /><Input value={item.reaction} onChange={(event) => setForm((current) => ({ ...current, allergies: current.allergies.map((value) => value.id === item.id ? { ...value, reaction: event.target.value } : value) }))} placeholder="Reaction / Severity" className={inputClass} /></div><Remove disabled={form.allergies.length === 1} onClick={() => setForm((current) => ({ ...current, allergies: current.allergies.length === 1 ? current.allergies : current.allergies.filter((value) => value.id !== item.id) }))} /></div>)}<Button type="button" variant="ghost" size="sm" onClick={() => setForm((current) => ({ ...current, allergies: [...current.allergies, { id: id(), allergen: "", reaction: "" }] }))}><Plus className="size-4" /> Add another allergy</Button></div> : null}</Section>
-    <Section number={5} title="Current Medications"><Check checked={form.noMedications} onChange={(checked) => change("noMedications", checked)} label="None — Not currently taking maintenance medications" />{!form.noMedications ? <div className="space-y-3">{form.medications.map((item) => <div key={item.id} className="flex gap-2"><div className="grid flex-1 gap-3 sm:grid-cols-3"><Input value={item.name} onChange={(event) => setForm((current) => ({ ...current, medications: current.medications.map((value) => value.id === item.id ? { ...value, name: event.target.value } : value) }))} placeholder="Medication Name" className={inputClass} /><Input value={item.dosage} onChange={(event) => setForm((current) => ({ ...current, medications: current.medications.map((value) => value.id === item.id ? { ...value, dosage: event.target.value } : value) }))} placeholder="Dosage & Frequency" className={inputClass} /><Input value={item.purpose} onChange={(event) => setForm((current) => ({ ...current, medications: current.medications.map((value) => value.id === item.id ? { ...value, purpose: event.target.value } : value) }))} placeholder="Purpose / Indication" className={inputClass} /></div><Remove disabled={form.medications.length === 1} onClick={() => setForm((current) => ({ ...current, medications: current.medications.length === 1 ? current.medications : current.medications.filter((value) => value.id !== item.id) }))} /></div>)}<Button type="button" variant="ghost" size="sm" onClick={() => setForm((current) => ({ ...current, medications: [...current.medications, { id: id(), name: "", dosage: "", purpose: "" }] }))}><Plus className="size-4" /> Add another medication</Button></div> : null}</Section>
-    <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : editing ? "Confirm and Save Changes" : "Save Patient Record"}</Button></div>
-  </form>;
+function Icon({
+  children,
+  title,
+  onClick,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  title: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={title}
+      className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {children}
+    </button>
+  );
 }
-function Field({ label, required = false, span = false, children }: { label: string; required?: boolean; span?: boolean; children: React.ReactNode }) { return <label className={`space-y-2 text-sm font-medium ${span ? "sm:col-span-2" : ""}`}>{label}{required ? <span className="text-secondary"> *</span> : null}{children}</label>; }
-function Check({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) { return <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="accent-primary" />{label}</label>; }
+function Modal({
+  title,
+  subtitle,
+  onClose,
+  wide,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  onClose: () => void;
+  wide: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="print-modal fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
+      <section
+        role="dialog"
+        aria-modal="true"
+        className={`w-full ${wide ? "max-w-4xl" : "max-w-lg"} max-h-[92vh] overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl`}
+      >
+        <div className="print-hidden flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+function ScanStatus({
+  status,
+  prompt,
+}: {
+  status: ReaderStatus;
+  prompt: string;
+}) {
+  const good = status === "connected" || status === "scanning";
+  return (
+    <div className="mt-6 rounded-xl border border-border bg-background p-5 text-center">
+      <ScanLine className="mx-auto size-8 text-primary" />
+      <div className="mt-3 flex items-center justify-center gap-2 text-sm font-medium">
+        <span
+          className={`size-2.5 rounded-full ${good ? "bg-emerald-500" : status === "connecting" ? "bg-amber-400" : "bg-secondary"}`}
+        />
+        {status === "scanning"
+          ? "Waiting for RFID card"
+          : status === "connected"
+            ? "RFID reader connected"
+            : status === "connecting"
+              ? "Connecting RFID reader…"
+              : "RFID reader not connected"}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {status === "scanning"
+          ? prompt
+          : status === "connecting"
+            ? "Choose the ESP32 in the browser prompt."
+            : "Connect the ESP32 by USB, then try again."}
+      </p>
+    </div>
+  );
+}
 
-function PatientWorkspace({ patients, loading, query, setQuery, filter, setFilter, canManage, onAdd, onView, onEdit, error, mode, prompt, readerStatus, readOnly, form, setForm, inputClass, saving, editing, onSave, onClose, onArchive, onDelete }: { patients: Patient[]; loading: boolean; query: string; setQuery: (value: string) => void; filter: "active" | "archived"; setFilter: (value: "active" | "archived") => void; canManage: boolean; onAdd: () => void; onView: (patient: Patient) => void; onEdit: (patient: Patient) => void; error: string; mode: Mode; prompt: string; readerStatus: ReaderStatus; readOnly: boolean; form: Form; setForm: React.Dispatch<React.SetStateAction<Form>>; inputClass: string; saving: boolean; editing: boolean; onSave: (event: React.FormEvent<HTMLFormElement>) => void; onClose: () => void; onArchive: () => void; onDelete: () => void }) {
+function PatientFields({
+  form,
+  setForm,
+  inputClass,
+  saving,
+  editing,
+  onSubmit,
+  onCancel,
+}: {
+  form: Form;
+  setForm: React.Dispatch<React.SetStateAction<Form>>;
+  inputClass: string;
+  saving: boolean;
+  editing: boolean;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  const change = <K extends keyof Form>(key: K, value: Form[K]) =>
+    setForm((current) => ({ ...current, [key]: value }));
+  return (
+    <form className="mt-6 space-y-5" onSubmit={onSubmit}>
+      <Section number={1} title="Patient Information">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="First Name" required>
+            <Input
+              value={form.firstName}
+              onChange={(event) => change("firstName", event.target.value)}
+              required
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Last Name" required>
+            <Input
+              value={form.lastName}
+              onChange={(event) => change("lastName", event.target.value)}
+              required
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Middle Name">
+            <Input
+              value={form.middleName}
+              onChange={(event) => change("middleName", event.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Birthdate" required>
+            <BirthdatePicker
+              value={form.birthDate}
+              onChange={(value) => change("birthDate", value)}
+            />
+          </Field>
+          <Field label="Age">
+            <Input
+              value={age(form.birthDate)}
+              readOnly
+              placeholder="Years"
+              className={inputClass}
+            />
+          </Field>
+          <fieldset className="space-y-2 text-sm font-medium">
+            <legend>
+              Biological Sex <span className="text-secondary">*</span>
+            </legend>
+            <div className="flex flex-wrap gap-4 text-sm font-normal">
+              {["Male", "Female", "Intersex"].map((sex) => (
+                <label key={sex} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="sex"
+                    value={sex}
+                    checked={form.sex === sex}
+                    onChange={() => change("sex", sex)}
+                    required
+                    className="accent-primary"
+                  />
+                  {sex}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <Field label="Contact Number" required>
+            <Input
+              type="tel"
+              value={form.number}
+              onChange={(event) => change("number", event.target.value)}
+              required
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Email Address" required>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(event) => change("email", event.target.value)}
+              required
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Residential Address" required span>
+            <Input
+              value={form.address}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  address: event.target.value,
+                  emergencyAddress: current.sameEmergencyAddress
+                    ? event.target.value
+                    : current.emergencyAddress,
+                }))
+              }
+              required
+              className={inputClass}
+            />
+          </Field>
+        </div>
+      </Section>
+      <Section number={2} title="Emergency Contact">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Full Name" required span>
+            <Input
+              value={form.emergencyName}
+              onChange={(event) => change("emergencyName", event.target.value)}
+              required
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Relationship" required>
+            <select
+              value={form.relationship}
+              onChange={(event) => change("relationship", event.target.value)}
+              required
+              className="h-11 w-full border-0 border-b border-border bg-transparent px-0 text-sm outline-none focus:border-primary"
+            >
+              <option value="">Select relationship</option>
+              {relationships.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+          </Field>
+          {form.relationship === "Other" ? (
+            <Field label="Specify relationship" required>
+              <Input
+                value={form.otherRelationship}
+                onChange={(event) =>
+                  change("otherRelationship", event.target.value)
+                }
+                placeholder="e.g., Guardian"
+                required
+                className={inputClass}
+              />
+            </Field>
+          ) : null}
+          <Field label="Phone Number" required>
+            <Input
+              type="tel"
+              value={form.emergencyNumber}
+              onChange={(event) =>
+                change("emergencyNumber", event.target.value)
+              }
+              required
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Email Address (optional)">
+            <Input
+              type="email"
+              value={form.emergencyEmail}
+              onChange={(event) => change("emergencyEmail", event.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <label className="flex items-end gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.sameEmergencyAddress}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  sameEmergencyAddress: event.target.checked,
+                  emergencyAddress: event.target.checked
+                    ? current.address
+                    : current.emergencyAddress,
+                }))
+              }
+              className="accent-primary"
+            />
+            Same as patient address
+          </label>
+          <Field label="Address (optional)" span>
+            <Input
+              value={form.emergencyAddress}
+              disabled={form.sameEmergencyAddress}
+              onChange={(event) =>
+                change("emergencyAddress", event.target.value)
+              }
+              className={inputClass}
+            />
+          </Field>
+        </div>
+      </Section>
+      <Section number={3} title="Existing or Ongoing Conditions">
+        <Check
+          checked={form.noConditions}
+          onChange={(checked) => change("noConditions", checked)}
+          label="None — Patient has no known ongoing medical conditions"
+        />
+        {!form.noConditions ? (
+          <div className="space-y-3">
+            {form.conditions.map((item) => (
+              <div key={item.id} className="flex gap-2">
+                <Input
+                  value={item.text}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      conditions: current.conditions.map((value) =>
+                        value.id === item.id
+                          ? { ...value, text: event.target.value }
+                          : value,
+                      ),
+                    }))
+                  }
+                  placeholder="e.g., Hypertension, Type 2 Diabetes"
+                  className={inputClass}
+                />
+                <Remove
+                  disabled={form.conditions.length === 1}
+                  onClick={() =>
+                    setForm((current) => ({
+                      ...current,
+                      conditions:
+                        current.conditions.length === 1
+                          ? current.conditions
+                          : current.conditions.filter(
+                              (value) => value.id !== item.id,
+                            ),
+                    }))
+                  }
+                />
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  conditions: [...current.conditions, { id: id(), text: "" }],
+                }))
+              }
+            >
+              <Plus className="size-4" /> Add another condition
+            </Button>
+          </div>
+        ) : null}
+      </Section>
+      <Section number={4} title="Known Allergies & Reactions">
+        <Check
+          checked={form.noAllergies}
+          onChange={(checked) => change("noAllergies", checked)}
+          label="No Known Allergies (NKA)"
+        />
+        {!form.noAllergies ? (
+          <div className="space-y-3">
+            {form.allergies.map((item) => (
+              <div key={item.id} className="flex gap-2">
+                <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                  <Input
+                    value={item.allergen}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        allergies: current.allergies.map((value) =>
+                          value.id === item.id
+                            ? { ...value, allergen: event.target.value }
+                            : value,
+                        ),
+                      }))
+                    }
+                    placeholder="Allergen"
+                    className={inputClass}
+                  />
+                  <Input
+                    value={item.reaction}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        allergies: current.allergies.map((value) =>
+                          value.id === item.id
+                            ? { ...value, reaction: event.target.value }
+                            : value,
+                        ),
+                      }))
+                    }
+                    placeholder="Reaction / Severity"
+                    className={inputClass}
+                  />
+                </div>
+                <Remove
+                  disabled={form.allergies.length === 1}
+                  onClick={() =>
+                    setForm((current) => ({
+                      ...current,
+                      allergies:
+                        current.allergies.length === 1
+                          ? current.allergies
+                          : current.allergies.filter(
+                              (value) => value.id !== item.id,
+                            ),
+                    }))
+                  }
+                />
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  allergies: [
+                    ...current.allergies,
+                    { id: id(), allergen: "", reaction: "" },
+                  ],
+                }))
+              }
+            >
+              <Plus className="size-4" /> Add another allergy
+            </Button>
+          </div>
+        ) : null}
+      </Section>
+      <Section number={5} title="Current Medications">
+        <Check
+          checked={form.noMedications}
+          onChange={(checked) => change("noMedications", checked)}
+          label="None — Not currently taking maintenance medications"
+        />
+        {!form.noMedications ? (
+          <div className="space-y-3">
+            {form.medications.map((item) => (
+              <div key={item.id} className="flex gap-2">
+                <div className="grid flex-1 gap-3 sm:grid-cols-3">
+                  <Input
+                    value={item.name}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        medications: current.medications.map((value) =>
+                          value.id === item.id
+                            ? { ...value, name: event.target.value }
+                            : value,
+                        ),
+                      }))
+                    }
+                    placeholder="Medication Name"
+                    className={inputClass}
+                  />
+                  <Input
+                    value={item.dosage}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        medications: current.medications.map((value) =>
+                          value.id === item.id
+                            ? { ...value, dosage: event.target.value }
+                            : value,
+                        ),
+                      }))
+                    }
+                    placeholder="Dosage & Frequency"
+                    className={inputClass}
+                  />
+                  <Input
+                    value={item.purpose}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        medications: current.medications.map((value) =>
+                          value.id === item.id
+                            ? { ...value, purpose: event.target.value }
+                            : value,
+                        ),
+                      }))
+                    }
+                    placeholder="Purpose / Indication"
+                    className={inputClass}
+                  />
+                </div>
+                <Remove
+                  disabled={form.medications.length === 1}
+                  onClick={() =>
+                    setForm((current) => ({
+                      ...current,
+                      medications:
+                        current.medications.length === 1
+                          ? current.medications
+                          : current.medications.filter(
+                              (value) => value.id !== item.id,
+                            ),
+                    }))
+                  }
+                />
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  medications: [
+                    ...current.medications,
+                    { id: id(), name: "", dosage: "", purpose: "" },
+                  ],
+                }))
+              }
+            >
+              <Plus className="size-4" /> Add another medication
+            </Button>
+          </div>
+        ) : null}
+      </Section>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={saving}>
+          {saving
+            ? "Saving…"
+            : editing
+              ? "Confirm and Save Changes"
+              : "Save Patient Record"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+function Field({
+  label,
+  required = false,
+  span = false,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  span?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label
+      className={`space-y-2 text-sm font-medium ${span ? "sm:col-span-2" : ""}`}
+    >
+      {label}
+      {required ? <span className="text-secondary"> *</span> : null}
+      {children}
+    </label>
+  );
+}
+function Check({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="accent-primary"
+      />
+      {label}
+    </label>
+  );
+}
+
+function PatientWorkspace({
+  patients,
+  loading,
+  query,
+  setQuery,
+  filter,
+  setFilter,
+  canManage,
+  onAdd,
+  onScanSearch,
+  searchingByRfid,
+  onView,
+  onPrint,
+  onEdit,
+  onRestore,
+  onDeletePatient,
+  error,
+  mode,
+  prompt,
+  readerStatus,
+  readOnly,
+  form,
+  staffName,
+  printPatient,
+  setForm,
+  inputClass,
+  saving,
+  editing,
+  onSave,
+  onClose,
+  onArchive,
+  onDelete,
+}: {
+  patients: Patient[];
+  loading: boolean;
+  query: string;
+  setQuery: (value: string) => void;
+  filter: "active" | "archived";
+  setFilter: (value: "active" | "archived") => void;
+  canManage: boolean;
+  onAdd: () => void;
+  onScanSearch: () => void;
+  searchingByRfid: boolean;
+  onView: (patient: Patient) => void;
+  onPrint: (patient: Patient) => void;
+  onEdit: (patient: Patient) => void;
+  onRestore: (patient: Patient) => void;
+  onDeletePatient: (patient: Patient) => void;
+  error: string;
+  mode: Mode;
+  prompt: string;
+  readerStatus: ReaderStatus;
+  readOnly: boolean;
+  form: Form;
+  staffName: string;
+  printPatient: PatientPrintData;
+  setForm: React.Dispatch<React.SetStateAction<Form>>;
+  inputClass: string;
+  saving: boolean;
+  editing: boolean;
+  onSave: (event: React.FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
   const scanning = mode !== "idle" && mode !== "form";
-  return <div className="space-y-5"><div><p className="text-sm font-medium text-primary">Records workspace</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">Patient Information</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">View active and archived patient records connected to Firestore.</p></div><section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4"><div>{canManage ? <Button size="sm" className="rounded-lg" onClick={onAdd}><Plus className="size-4" /> Add Patient</Button> : null}</div><label className="relative w-full max-w-sm"><ScanLine className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Scan to search" className="bg-background pl-9" aria-label="Search patients" /></label><div className="inline-flex rounded-lg border border-border p-1">{(["active", "archived"] as const).map((status) => <button key={status} type="button" onClick={() => setFilter(status)} className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize ${filter === status ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}>{status}</button>)}</div></div>{error ? <p role="alert" className="mb-4 mt-4 text-sm text-secondary">{error}</p> : null}<div className="overflow-x-auto rounded-xl border border-border"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-background text-xs font-semibold uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Patient ID</th><th className="px-4 py-3">Name</th><th className="px-4 py-3">Number</th><th className="px-4 py-3">Address</th><th className="px-4 py-3">Date Joined</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-border">{loading ? <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Loading patients…</td></tr> : patients.length === 0 ? <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No {filter} patient records found.</td></tr> : patients.map((patient) => <tr key={patient.id}><td className="px-4 py-4 font-medium">{patient.patientId}</td><td className="px-4 py-4 font-medium">{patient.name}</td><td className="px-4 py-4">{patient.number}</td><td className="px-4 py-4">{patient.address}</td><td className="px-4 py-4">{formatDate(patient.dateJoined)}</td><td className="px-4 py-4"><div className="flex justify-end gap-1"><Icon title="View patient information" onClick={() => onView(patient)}><Eye className="size-4" /></Icon>{canManage ? <Icon title="Edit patient information" onClick={() => onEdit(patient)}><Pencil className="size-4" /></Icon> : null}<Icon title="Print patient information" onClick={() => window.print()}><Printer className="size-4" /></Icon></div></td></tr>)}</tbody></table></div></section>{mode !== "idle" ? <Modal title={scanning ? "Tap RFID card" : readOnly ? "Patient Information" : editing ? "Edit Patient Information" : "Patient Information Form"} subtitle={scanning ? prompt : readOnly ? "Saved patient record." : editing ? "Update the record, then confirm with the patient card twice." : "Complete the new patient record, then confirm with the patient card twice."} onClose={onClose} wide={mode === "form"}>{scanning ? <ScanStatus status={readerStatus} prompt={prompt} /> : readOnly ? <PatientSummary form={form} onClose={onClose} /> : <><PatientFields form={form} setForm={setForm} inputClass={inputClass} saving={saving} editing={editing} onSubmit={onSave} onCancel={onClose} />{editing ? <div className="mt-4 flex flex-wrap justify-between gap-2 border-t border-border pt-4"><Button type="button" variant="outline" disabled={saving} onClick={onArchive}>{filter === "archived" ? <><ArchiveRestore className="size-4" /> Restore Patient</> : <><Archive className="size-4" /> Archive Patient</>}</Button>{filter === "archived" ? <Button type="button" variant="outline" disabled={saving} onClick={onDelete} className="border-secondary text-secondary hover:bg-secondary/10"><Trash2 className="size-4" /> Delete Permanently</Button> : null}</div> : null}</>}</Modal> : null}</div>;
+  return (
+    <>
+    <div className="patient-workspace space-y-5 print:hidden">
+      <div>
+        <p className="text-sm font-medium text-primary">Records workspace</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">
+          Patient Information
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          View active and archived patient records connected to Firestore.
+        </p>
+      </div>
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+          <div>
+            {canManage ? (
+              <Button size="sm" className="rounded-lg" onClick={onAdd}>
+                <Plus className="size-4" /> Add Patient
+              </Button>
+            ) : null}
+          </div>
+          <label className="relative w-full max-w-sm">
+            <button
+              type="button"
+              onClick={onScanSearch}
+              className={"absolute left-3 top-1/2 -translate-y-1/2 rounded-md p-1 transition-all active:scale-75 " + (searchingByRfid ? "animate-pulse bg-accent text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground")}
+              aria-label="Tap RFID card to search"
+              title="Tap RFID card to search"
+            >
+              <ScanLine className={"size-4 " + (searchingByRfid ? "animate-spin" : "")} />
+            </button>
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Scan to search"
+              className="bg-background pl-9"
+              aria-label="Search patients"
+            />
+          </label>
+          <div className="inline-flex rounded-lg border border-border p-1">
+            {(["active", "archived"] as const).map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setFilter(status)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize ${filter === status ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60"}`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
+        {error ? (
+          <p role="alert" className="mb-4 mt-4 text-sm text-secondary">
+            {error}
+          </p>
+        ) : null}
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="bg-background text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">Patient ID</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Number</th>
+                <th className="px-4 py-3">Address</th>
+                <th className="px-4 py-3">Date Joined</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-muted-foreground"
+                  >
+                    Loading patients…
+                  </td>
+                </tr>
+              ) : patients.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-muted-foreground"
+                  >
+                    No {filter} patient records found.
+                  </td>
+                </tr>
+              ) : (
+                patients.map((patient) => (
+                  <tr key={patient.id}>
+                    <td className="px-4 py-4 font-medium">
+                      {patient.patientId}
+                    </td>
+                    <td className="px-4 py-4 font-medium">{patient.name}</td>
+                    <td className="px-4 py-4">{patient.number}</td>
+                    <td className="px-4 py-4">{patient.address}</td>
+                    <td className="px-4 py-4">
+                      {formatDate(patient.dateJoined)}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex justify-end gap-1">
+                        {filter === "archived" && canManage ? (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onRestore(patient)}
+                            >
+                              <ArchiveRestore className="size-4" /> Restore
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-secondary text-secondary hover:bg-secondary/10"
+                              onClick={() => onDeletePatient(patient)}
+                            >
+                              <Trash2 className="size-4" /> Delete
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Icon
+                              title="View patient information"
+                              onClick={() => onView(patient)}
+                            >
+                              <Eye className="size-4" />
+                            </Icon>
+                            {canManage ? (
+                              <Icon
+                                title="Edit patient information"
+                                onClick={() => onEdit(patient)}
+                              >
+                                <Pencil className="size-4" />
+                              </Icon>
+                            ) : null}
+                            <Icon
+                              title="Verify RFID, then print patient information"
+                              onClick={() => onPrint(patient)}
+                            >
+                              <Printer className="size-4" />
+                            </Icon>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {mode !== "idle" ? (
+        <Modal
+          title={
+            scanning
+              ? "Tap RFID card"
+              : readOnly
+                ? "Patient Information"
+                : editing
+                  ? "Edit Patient Information"
+                  : "Patient Information Form"
+          }
+          subtitle={
+            scanning
+              ? prompt
+              : readOnly
+                ? "Saved patient record."
+                : editing
+                  ? "Update the record, then confirm with the patient card twice."
+                  : "Complete the new patient record, then confirm with the patient card twice."
+          }
+          onClose={onClose}
+          wide={mode === "form"}
+        >
+          {scanning ? (
+            <ScanStatus status={readerStatus} prompt={prompt} />
+          ) : readOnly ? (
+            <div className="mt-6 overflow-x-auto">
+              <PatientPrintChart patient={printPatient} />
+              <div className="mt-4 flex justify-end">
+                <Button type="button" onClick={onClose}>Close</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <PatientFields
+                form={form}
+                setForm={setForm}
+                inputClass={inputClass}
+                saving={saving}
+                editing={editing}
+                onSubmit={onSave}
+                onCancel={onClose}
+              />
+              {editing ? (
+                <div className="mt-4 flex flex-wrap justify-between gap-2 border-t border-border pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={onArchive}
+                  >
+                    {filter === "archived" ? (
+                      <>
+                        <ArchiveRestore className="size-4" /> Restore Patient
+                      </>
+                    ) : (
+                      <>
+                        <Archive className="size-4" /> Archive Patient
+                      </>
+                    )}
+                  </Button>
+                  {filter === "archived" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={onDelete}
+                      className="border-secondary text-secondary hover:bg-secondary/10"
+                    >
+                      <Trash2 className="size-4" /> Delete Permanently
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          )}
+        </Modal>
+      ) : null}
+    </div>
+    <div className="hidden print:block"><PatientPrintChart patient={printPatient} /></div>
+    </>
+  );
 }
 
-function PatientSummary({ form, onClose }: { form: Form; onClose: () => void }) {
-  const conditions = form.noConditions ? ["None"] : form.conditions.map((item) => item.text).filter(Boolean);
-  const allergies = form.noAllergies ? ["No Known Allergies (NKA)"] : form.allergies.filter((item) => item.allergen || item.reaction).map((item) => `${item.allergen}${item.reaction ? ` - ${item.reaction}` : ""}`);
-  const medications = form.noMedications ? [] : form.medications.filter((item) => item.name || item.dosage || item.purpose);
-  return <div className="mt-6 space-y-4 text-sm"><div className="border-b-2 border-primary pb-3"><p className="text-xs font-semibold tracking-wide">HOSPITAL PATIENT RECORDS</p><h3 className="text-2xl font-semibold">Patient Information Chart</h3></div><Section number={1} title="Patient Information"><dl className="grid gap-4 sm:grid-cols-2"><Summary label="Full Name" value={joinedName(form)} /><Summary label="Age" value={age(form.birthDate)} /><Summary label="Biological Sex" value={form.sex} /><Summary label="Contact Number" value={form.number} /><Summary label="Email Address" value={form.email} /><Summary label="Residential Address" value={form.address} /></dl></Section><Section number={2} title="Emergency Contact"><dl className="grid gap-4 sm:grid-cols-2"><Summary label="Full Name" value={form.emergencyName} /><Summary label="Relationship" value={form.relationship === "Other" ? form.otherRelationship : form.relationship} /><Summary label="Phone Number" value={form.emergencyNumber} /><Summary label="Email Address" value={form.emergencyEmail} /><Summary label="Address" value={form.sameEmergencyAddress ? form.address : form.emergencyAddress} /></dl></Section><Section number={3} title="Medical Baseline & Medications"><ChartList label="Existing or Ongoing Conditions" values={conditions} /><ChartList label="Known Allergies & Reactions" values={allergies} /><div className="mt-4"><p className="font-semibold">Current Medications</p>{medications.length ? <div className="mt-2 overflow-x-auto border border-border"><table className="w-full min-w-[560px] text-left text-xs"><thead className="bg-background"><tr><th className="p-2">Medication Name</th><th className="p-2">Dosage & Frequency</th><th className="p-2">Purpose / Condition</th></tr></thead><tbody>{medications.map((item, index) => <tr key={`${item.name}-${index}`} className="border-t border-border"><td className="p-2">{item.name || "—"}</td><td className="p-2">{item.dosage || "—"}</td><td className="p-2">{item.purpose || "—"}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-muted-foreground">None</p>}</div></Section><div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => window.print()}><Printer className="size-4" /> Print</Button><Button type="button" onClick={onClose}>Close</Button></div></div>;
+function PatientSummary({
+  form,
+  staffName,
+  onClose,
+}: {
+  form: Form;
+  staffName: string;
+  onClose: () => void;
+}) {
+  const conditions = form.noConditions
+    ? ["None"]
+    : form.conditions.map((item) => item.text).filter(Boolean);
+  const allergies = form.noAllergies
+    ? ["No Known Allergies (NKA)"]
+    : form.allergies
+        .filter((item) => item.allergen || item.reaction)
+        .map((item) => `${item.allergen}${item.reaction ? ` - ${item.reaction}` : ""}`);
+  const medications = form.noMedications
+    ? []
+    : form.medications.filter((item) => item.name || item.dosage || item.purpose);
+
+  return (
+    <div className="print-chart mt-6 space-y-3 text-sm">
+      <header className="print-chart-header">
+        <p>HOSPITAL PATIENT RECORDS</p>
+        <h3>Patient Information Chart</h3>
+      </header>
+      <section className="chart-section">
+        <h4>1. Patient Information</h4>
+        <dl className="chart-grid">
+          <Summary label="Full Name" value={joinedName(form)} />
+          <Summary label="Age" value={age(form.birthDate)} />
+          <Summary label="Biological Sex" value={form.sex} />
+          <Summary label="Contact Number" value={form.number} />
+          <Summary label="Email Address" value={form.email} />
+          <Summary label="Residential Address" value={form.address} />
+        </dl>
+      </section>
+      <section className="chart-section">
+        <h4>2. Emergency Contact</h4>
+        <dl className="chart-grid">
+          <Summary label="Full Name" value={form.emergencyName} />
+          <Summary label="Relationship" value={form.relationship === "Other" ? form.otherRelationship : form.relationship} />
+          <Summary label="Phone Number" value={form.emergencyNumber} />
+          <Summary label="Email Address" value={form.emergencyEmail} />
+          <Summary label="Address" value={form.sameEmergencyAddress ? form.address : form.emergencyAddress} />
+        </dl>
+      </section>
+      <section className="chart-section">
+        <h4>3. Medical Baseline &amp; Medications</h4>
+        <ChartList label="Existing or Ongoing Conditions" values={conditions} />
+        <ChartList label="Known Allergies & Reactions" values={allergies} />
+        <div className="chart-medications">
+          <p>Current Medications</p>
+          <table>
+            <thead><tr><th>Medication Name</th><th>Dosage &amp; Frequency</th><th>Purpose / Condition</th></tr></thead>
+            <tbody>
+              {Array.from({ length: Math.max(medications.length, 3) }, (_, index) => {
+                const item = medications[index];
+                return <tr key={`${item?.name ?? "blank"}-${index}`}><td>{item?.name ?? ""}</td><td>{item?.dosage ?? ""}</td><td>{item?.purpose ?? ""}</td></tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <div className="chart-signatures"><span>Patient / Representative Signature</span><span>Updated By (Nurse / Staff): {staffName}</span></div>
+      <p className="chart-notice"><strong>Prototype Notice:</strong> This form is for prototype testing only; government IDs and billing details are excluded to protect patient privacy.</p>
+      <footer className="chart-footer"><span>Hospital Patient Record • Prototype</span><span>Page 1 of 1</span></footer>
+      <div className="print-hidden flex justify-end gap-2"><Button type="button" onClick={onClose}>Close</Button></div>
+    </div>
+  );
 }
-function ChartList({ label, values }: { label: string; values: string[] }) { return <div className="border-b border-border py-3"><p className="font-semibold">{label}</p>{values.length ? <ul className="mt-2 list-disc space-y-1 pl-5">{values.map((value, index) => <li key={`${value}-${index}`}>{value}</li>)}</ul> : <p className="mt-2 text-muted-foreground">None recorded</p>}</div>; }
-function Summary({ label, value }: { label: string; value: string }) { return <div><dt className="text-muted-foreground">{label}</dt><dd className="mt-1 font-medium">{value || "—"}</dd></div>; }
+function ChartList({ label, values }: { label: string; values: string[] }) {
+  return <div className="chart-list"><p>{label}</p>{values.length ? <ul>{values.map((value, index) => <li key={`${value}-${index}`}>{value}</li>)}</ul> : <span>None recorded</span>}</div>;
+}
+function Summary({ label, value }: { label: string; value: string }) {
+  return <div className="chart-field"><dt>{label}</dt><dd>{value || "—"}</dd></div>;
+}

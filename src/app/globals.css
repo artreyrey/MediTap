@@ -85,9 +85,238 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   text-rendering: optimizeLegibility;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  body {
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-modal,
+  .print-modal *,
+  [role="dialog"],
+  [role="dialog"] * {
+    visibility: visible;
+  }
+  .print-modal {
+    position: static !important;
+    display: block !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    place-items: start !important;
+    place-content: start !important;
+    align-items: start !important;
+    align-content: start !important;
+    justify-items: stretch !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+  .patient-workspace > :not(.print-modal) {
+    display: none !important;
+  }
+  body:has(.print-modal) aside,
+  body:has(.print-modal) header {
+    display: none !important;
+  }
+  body:has(.print-modal) > div > div {
+    padding-left: 0 !important;
+  }
+  main:has(.print-modal) {
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+  [role="dialog"] {
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+  [role="dialog"] button {
+    display: none !important;
+  }
+  .print-hidden {
+    display: none !important;
+  }
+  .patient-print-chart,
+  .patient-print-chart * {
+    visibility: visible !important;
+  }
+  .patient-print-chart {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    margin: 0 !important;
+  }
+  .print-chart {
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #111 !important;
+    font-family: Arial, sans-serif !important;
+    font-size: 8pt !important;
+    line-height: 1.25 !important;
+  }
+  .print-chart-header {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    border-bottom: 1.5px solid #145d65;
+    padding: 0 0 2.5mm !important;
+  }
+  .print-chart-header p {
+    margin: 0 !important;
+    font-size: 7pt !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em;
+  }
+  .print-chart-header h3 {
+    margin: 0 !important;
+    font-size: 15pt !important;
+    line-height: 1 !important;
+  }
+  .chart-section {
+    break-inside: avoid;
+    margin: 2.5mm 0 !important;
+    border: 1px solid #145d65 !important;
+  }
+  .chart-section h4 {
+    margin: 0 !important;
+    border-left: 3px solid #145d65;
+    border-bottom: 1px solid #145d65;
+    background: #f3ede6 !important;
+    padding: 1.5mm 2mm !important;
+    font-size: 9pt !important;
+    font-weight: 700 !important;
+  }
+  .chart-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0 !important;
+  }
+  .chart-field {
+    min-height: 11mm;
+    border-right: 1px solid #145d65;
+    border-bottom: 1px solid #145d65;
+    padding: 1.5mm 2mm !important;
+  }
+  .chart-field:nth-child(3n) {
+    border-right: 0;
+  }
+  .chart-field dt {
+    margin: 0 0 1mm !important;
+    font-size: 6.5pt !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+  }
+  .chart-field dd {
+    margin: 0 !important;
+    font-size: 8pt !important;
+    font-weight: 600 !important;
+    overflow-wrap: anywhere;
+  }
+  .chart-list {
+    min-height: 15mm;
+    border-bottom: 1px solid #145d65;
+    padding: 1.5mm 2mm !important;
+  }
+  .chart-list p,
+  .chart-medications > p {
+    margin: 0 !important;
+    font-size: 7pt !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+  }
+  .chart-list ul {
+    margin: 1mm 0 0 !important;
+    padding-left: 4mm !important;
+  }
+  .chart-list li {
+    margin: 0 0 0.5mm !important;
+  }
+  .chart-list span {
+    display: block;
+    margin-top: 1mm;
+  }
+  .chart-medications {
+    padding: 1.5mm 0 0 !important;
+  }
+  .chart-medications > p {
+    padding: 0 2mm 1mm !important;
+  }
+  .chart-medications table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+  }
+  .chart-medications th,
+  .chart-medications td {
+    border: 1px solid #145d65 !important;
+    padding: 1mm 2mm !important;
+    text-align: left !important;
+    vertical-align: top !important;
+  }
+  .chart-medications th {
+    background: #f3ede6 !important;
+    font-size: 6.5pt !important;
+    text-transform: uppercase;
+  }
+  .chart-medications td {
+    height: 5mm;
+  }
+  .chart-signatures {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 7mm !important;
+    margin-top: 5mm !important;
+  }
+  .chart-signatures span {
+    border-bottom: 1px solid #145d65;
+    padding-bottom: 1mm;
+    font-size: 7pt !important;
+    font-weight: 700 !important;
+  }
+  .chart-notice {
+    margin: 3mm 0 !important;
+    border-left: 3px solid #d97f6c;
+    background: #f3ede6 !important;
+    padding: 1.5mm 2mm !important;
+    font-size: 6.5pt !important;
+  }
+  .chart-footer {
+    display: flex !important;
+    justify-content: space-between;
+    border-top: 1px solid #145d65;
+    padding-top: 1.5mm !important;
+    font-size: 6.5pt !important;
+  }
 }
 
 ::selection {

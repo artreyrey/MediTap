@@ -6,6 +6,9 @@
 
 #define SS_PIN 5
 #define RST_PIN 22
+#define BUZZER_PIN 25
+#define GREEN_LED_PIN 26
+#define RED_LED_PIN 27
 
 const unsigned long SCAN_TIMEOUT_MS = 30000;
 const size_t MAX_COMMAND_LENGTH = 256;
@@ -15,6 +18,26 @@ String commandBuffer;
 String activeRequestId;
 unsigned long scanStartedAt = 0;
 bool scanning = false;
+
+void feedback(bool accepted) {
+  const int ledPin = accepted ? GREEN_LED_PIN : RED_LED_PIN;
+  digitalWrite(ledPin, HIGH);
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(accepted ? 120 : 700);
+  digitalWrite(BUZZER_PIN, LOW);
+  delay(accepted ? 180 : 120);
+  digitalWrite(ledPin, LOW);
+}
+
+void testLeds() {
+  digitalWrite(GREEN_LED_PIN, HIGH);
+  delay(300);
+  digitalWrite(GREEN_LED_PIN, LOW);
+  delay(200);
+  digitalWrite(RED_LED_PIN, HIGH);
+  delay(300);
+  digitalWrite(RED_LED_PIN, LOW);
+}
 
 String readJsonString(const String &json, const String &key) {
   const String marker = "\"" + key + "\"";
@@ -84,6 +107,13 @@ void handleCommand(const String &command) {
     return;
   }
 
+  if (action == "RFID_FEEDBACK") {
+    const String result = readJsonString(command, "result");
+    if (result == "accepted") feedback(true);
+    else if (result == "rejected") feedback(false);
+    return;
+  }
+
   if (action == "CANCEL_SCAN" && scanning && requestId == activeRequestId) {
     stopScan("cancelled");
   }
@@ -105,6 +135,13 @@ void readCommands() {
 
 void setup() {
   Serial.begin(115200);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(GREEN_LED_PIN, OUTPUT);
+  pinMode(RED_LED_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(GREEN_LED_PIN, LOW);
+  digitalWrite(RED_LED_PIN, LOW);
+  testLeds();
   SPI.begin(18, 19, 23, 5);
   rfid.PCD_Init();
 }

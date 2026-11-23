@@ -18,6 +18,12 @@
 # local code-graph artifacts
 graphify-out/
 .codex/hooks.json
+.agents/
+.codex/
+
+# generated local artifacts
+output/
+tmp/
 
 # misc
 .DS_Store

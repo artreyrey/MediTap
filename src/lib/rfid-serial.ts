@@ -90,6 +90,11 @@ class RfidSerial {
     this.finishScan(new Error("RFID scan cancelled."));
   }
 
+  async feedback(result: "accepted" | "rejected") {
+    if (!this.port || this.status === "disconnected" || this.status === "unsupported") return;
+    await this.send({ command: "RFID_FEEDBACK", result }).catch(() => undefined);
+  }
+
   private async open(port: SerialPort) {
     this.setStatus("connecting");
     try {
